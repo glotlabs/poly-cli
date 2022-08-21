@@ -3,6 +3,14 @@ name = "polyester-cli"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "polyester"
+path = "src/main.rs"
 
 [dependencies]
+clap = { version = "3.2.17", features = ["derive"] }
+fs_extra = "1.2.0"
+gitignored = "0.4.0"
+notify = "5.0.0-pre.16"
+serde = { version = "1.0.144", features = ["derive"] }
+toml = "0.5.9"

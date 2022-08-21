@@ -1,3 +1,63 @@
+mod build;
+mod exec;
+mod project_info;
+mod rust_builder;
+mod typescript_builder;
+mod watch;
+
+use build::Env;
+use clap::{Parser, Subcommand};
+use project_info::ProjectInfo;
+use std::path::PathBuf;
+
+#[derive(Debug, Parser)]
+#[clap(name = "polyester")]
+#[clap(about = "CLI helper for working with polyester projects", long_about = None)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Watch for changes and build
+    #[clap(arg_required_else_help = true)]
+    Watch {
+        /// The build script to run
+        script: String,
+    },
+}
+
 fn main() {
-    println!("Hello, world!");
+    let args = Cli::parse();
+
+    match args.command {
+        Commands::Watch { script } => {
+            let current_dir = get_current_dir();
+            println!("Watching for changes...");
+            // TODO: print project_info to screen before watching
+            // TODO: handle errors
+            let project_info = ProjectInfo::from_dir(&current_dir).unwrap();
+            println!("{:?}", project_info);
+
+            // TODO: get env from arg
+            let env = Env::Dev;
+
+            let builder = build::Builder::new(build::Config {
+                rust_builder: rust_builder::RustBuilder::new(
+                    rust_builder::Config::from_project_info(&env, &project_info),
+                ),
+                typescript_builder: typescript_builder::TypeScriptBuilder::new(
+                    typescript_builder::Config::from_project_info(&env, &project_info),
+                ),
+                //post_build_script: None,
+            });
+            let watcher_config = watch::Config::new(&current_dir, builder);
+            watch::watch(watcher_config);
+        }
+    }
+}
+
+fn get_current_dir() -> PathBuf {
+    std::env::current_dir().unwrap()
 }
