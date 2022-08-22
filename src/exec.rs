@@ -62,6 +62,8 @@ pub fn to_args(args: &[&str]) -> Vec<String> {
 }
 
 pub fn run(config: &Config) -> Result<String, Error> {
+    log(config);
+
     Command::new(&config.cmd)
         .current_dir(&config.work_dir)
         .args(&config.args)
@@ -69,6 +71,11 @@ pub fn run(config: &Config) -> Result<String, Error> {
         .map(|output| Output(output))
         .map_err(Error::FailedToExecute)
         .and_then(|output| output.read_stdout())
+}
+
+fn log(config: &Config) {
+    let args = config.args.join(" ");
+    println!("Executing: '{} {}'", config.cmd, args);
 }
 
 #[derive(Debug)]

@@ -1,5 +1,7 @@
 use crate::rust_builder;
 use crate::rust_builder::RustBuilder;
+use crate::script_runner;
+use crate::script_runner::ScriptRunner;
 use crate::typescript_builder;
 use crate::typescript_builder::TypeScriptBuilder;
 use std::collections::HashSet;
@@ -22,6 +24,7 @@ pub enum Error {
 pub enum BuildError {
     RustBuild(rust_builder::Error),
     TypescriptBuild(typescript_builder::Error),
+    PostBuildRunner(script_runner::Error),
 }
 
 #[derive(Debug, Clone)]
@@ -34,7 +37,7 @@ pub struct Builder {
 pub struct Config {
     pub rust_builder: RustBuilder,
     pub typescript_builder: TypeScriptBuilder,
-    //post_build_script: Option<PathBuf>,
+    pub post_build_runner: Option<ScriptRunner>,
 }
 
 impl Builder {
@@ -88,23 +91,29 @@ fn build(config: Config, state: Arc<State>) -> Result<(), Error> {
         let build_type = BuildType::from_changes(changes);
 
         std::thread::spawn(move || {
-            match run_script(build_type, &config) {
-                Ok(()) => {}
-                Err(err) => {
-                    handle_build_error(err);
-                }
+            if let Err(err) = run_script(build_type, &config) {
+                handle_build_error(err);
             };
 
             state
                 .is_running
                 .store(false, std::sync::atomic::Ordering::Relaxed);
 
-            build(config, state);
+            if let Err(err) = build(config, state) {
+                handle_error(err);
+            }
         });
 
         Ok(())
     } else {
         Ok(())
+    }
+}
+pub fn handle_error(err: Error) {
+    match err {
+        Error::BacklogLock(err) => {
+            println!("Failed to get a lock on backlog: {}", err);
+        }
     }
 }
 
@@ -118,6 +127,11 @@ fn handle_build_error(err: BuildError) {
         BuildError::TypescriptBuild(err) => {
             // Prevent rustfmt
             println!("TypeScript build failed: {}", err);
+        }
+
+        BuildError::PostBuildRunner(err) => {
+            // Prevent rustfmt
+            println!("Post-build script failed: {}", err);
         }
     }
 }
@@ -138,7 +152,7 @@ impl State {
 }
 
 fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> {
-    println!("Starting build of {:?}", build_type);
+    println!("\nStarting build of {:?}", build_type);
 
     match build_type {
         BuildType::All => {
@@ -155,6 +169,12 @@ fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> 
                 .build()
                 .map_err(BuildError::TypescriptBuild)?;
         }
+    }
+
+    if let Some(post_build_runner) = &config.post_build_runner {
+        post_build_runner
+            .build()
+            .map_err(BuildError::PostBuildRunner)?;
     }
 
     println!("Completed build of {:?}", build_type);

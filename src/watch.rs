@@ -1,3 +1,4 @@
+use crate::build;
 use crate::build::Builder;
 use crate::build::ChangeType;
 use gitignored::Gitignore;
@@ -77,13 +78,16 @@ fn on_event(config: &mut Config, event_result: Result<Event, notify::Error>) -> 
         .map_err(|err| Error::RelativePath(err))?;
 
     let change_type = classify_file(&config, rel_path)?;
+
     println!(
         "{:?} triggered by {}",
         change_type,
         rel_path.to_string_lossy().to_string()
     );
 
-    config.builder.run(change_type);
+    if let Err(err) = config.builder.run(change_type) {
+        build::handle_error(err)
+    }
 
     Ok(())
 }
