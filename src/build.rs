@@ -13,8 +13,13 @@ pub enum ChangeType {
     TypeScript,
 }
 
+#[derive(Debug)]
 pub enum Error {
     BacklogLock(String),
+}
+
+#[derive(Debug)]
+pub enum BuildError {
     RustBuild(rust_builder::Error),
     TypescriptBuild(typescript_builder::Error),
 }
@@ -83,7 +88,12 @@ fn build(config: Config, state: Arc<State>) -> Result<(), Error> {
         let build_type = BuildType::from_changes(changes);
 
         std::thread::spawn(move || {
-            run_script(build_type, &config);
+            match run_script(build_type, &config) {
+                Ok(()) => {}
+                Err(err) => {
+                    handle_build_error(err);
+                }
+            };
 
             state
                 .is_running
@@ -95,6 +105,20 @@ fn build(config: Config, state: Arc<State>) -> Result<(), Error> {
         Ok(())
     } else {
         Ok(())
+    }
+}
+
+fn handle_build_error(err: BuildError) {
+    match err {
+        BuildError::RustBuild(err) => {
+            // Prevent rustfmt
+            println!("Rust build failed: {}", err);
+        }
+
+        BuildError::TypescriptBuild(err) => {
+            // Prevent rustfmt
+            println!("TypeScript build failed: {}", err);
+        }
     }
 }
 
@@ -113,30 +137,28 @@ impl State {
     }
 }
 
-fn run_script(build_type: BuildType, config: &Config) -> Result<(), Error> {
-    println!("Running build: {:?}", build_type);
+fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> {
+    println!("Starting build of {:?}", build_type);
 
     match build_type {
         BuildType::All => {
-            config.rust_builder.build().map_err(Error::RustBuild)?;
+            config.rust_builder.build().map_err(BuildError::RustBuild)?;
             config
                 .typescript_builder
                 .build()
-                .map_err(Error::TypescriptBuild)?;
+                .map_err(BuildError::TypescriptBuild)?;
         }
 
         BuildType::OnlyTypeScript => {
             config
                 .typescript_builder
                 .build()
-                .map_err(Error::TypescriptBuild)?;
+                .map_err(BuildError::TypescriptBuild)?;
         }
     }
 
-    //let output =
-    //    exec::run(&script, &[]).map_err(|err| format!("Failed to run script: {:?}", err))?;
+    println!("Completed build of {:?}", build_type);
 
-    //println!("Output: {:?}", output.into_stdout());
     Ok(())
 }
 

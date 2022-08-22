@@ -10,6 +10,7 @@ use notify::RecursiveMode;
 use notify::Watcher;
 use std::fs::read_to_string;
 use std::io;
+use std::path;
 use std::path::Path;
 use std::path::PathBuf;
 use std::path::StripPrefixError;
@@ -76,6 +77,12 @@ fn on_event(config: &mut Config, event_result: Result<Event, notify::Error>) -> 
         .map_err(|err| Error::RelativePath(err))?;
 
     let change_type = classify_file(&config, rel_path)?;
+    println!(
+        "{:?} triggered by {}",
+        change_type,
+        rel_path.to_string_lossy().to_string()
+    );
+
     config.builder.run(change_type);
 
     Ok(())
@@ -116,6 +123,17 @@ fn classify_file(config: &Config, path: &Path) -> Result<ChangeType, Error> {
 }
 
 fn is_ignored(config: &Config, path: &Path) -> bool {
+    is_ignored_by_component(path) || is_ignored_by_git(config, path)
+}
+
+fn is_ignored_by_component(path: &Path) -> bool {
+    path.components().any(|component| {
+        // fmt
+        component == path::Component::Normal("wasm".as_ref())
+    })
+}
+
+fn is_ignored_by_git(config: &Config, path: &Path) -> bool {
     match &config.gitignore {
         Some(gitignore) => {
             let mut gi = Gitignore::new(&config.current_dir, false, false);

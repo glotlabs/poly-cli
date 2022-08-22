@@ -2,6 +2,8 @@ use crate::build::CodeBuilder;
 use crate::build::Env;
 use crate::exec;
 use crate::ProjectInfo;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -27,12 +29,31 @@ impl Config {
     }
 }
 
+#[derive(Debug)]
 pub enum Error {
     CreateDistDir(io::Error),
     CreateWebWasmDir(io::Error),
     CargoBuild(exec::Error),
     WasmPack(exec::Error),
     CopyWasmToDist(fs_extra::error::Error),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            Error::CreateDistDir(err) => write!(f, "Failed to create the dist dir: {}", err),
+
+            Error::CreateWebWasmDir(err) => {
+                write!(f, "Failed to create the wasm dir in web project: {}", err)
+            }
+
+            Error::CargoBuild(err) => write!(f, "cargo build failed: {}", err),
+
+            Error::WasmPack(err) => write!(f, "wasm-pack failed: {}", err),
+
+            Error::CopyWasmToDist(err) => write!(f, "Failed to copy wasm dir to dist: {}", err),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -60,7 +81,7 @@ impl RustBuilder {
         exec::run(&exec::Config {
             work_dir: ".".into(),
             cmd: "cargo".into(),
-            args: vec!["build".into()],
+            args: exec::to_args(&["build", "--color", "always"]),
         })
         .map_err(Error::CargoBuild)?;
 

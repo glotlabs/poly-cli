@@ -2,6 +2,7 @@ use crate::build::CodeBuilder;
 use crate::build::Env;
 use crate::exec;
 use crate::ProjectInfo;
+use std::fmt;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -19,8 +20,17 @@ impl Config {
     }
 }
 
+#[derive(Debug)]
 pub enum Error {
     NpmBuildDev(exec::Error),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Error::NpmBuildDev(err) => write!(f, "npm run build-dev failed: {}", err),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
