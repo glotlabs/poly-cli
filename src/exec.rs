@@ -74,8 +74,12 @@ pub fn run(config: &Config) -> Result<String, Error> {
 }
 
 fn log(config: &Config) {
-    let args = config.args.join(" ");
-    println!("Executing: '{} {}'", config.cmd, args);
+    if config.args.len() > 0 {
+        let args = config.args.join(" ");
+        println!("Executing: '{} {}'", config.cmd, args);
+    } else {
+        println!("Executing: '{}'", config.cmd);
+    }
 }
 
 #[derive(Debug)]
