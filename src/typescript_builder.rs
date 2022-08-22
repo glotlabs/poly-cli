@@ -1,5 +1,5 @@
-use crate::build::CodeBuilder;
 use crate::build::Env;
+use crate::build::Runner;
 use crate::exec;
 use crate::ProjectInfo;
 use std::fmt;
@@ -59,8 +59,8 @@ impl TypeScriptBuilder {
     }
 }
 
-impl CodeBuilder<Error> for TypeScriptBuilder {
-    fn build(&self) -> Result<(), Error> {
+impl Runner<Error> for TypeScriptBuilder {
+    fn run(&self) -> Result<(), Error> {
         match &self.config.env {
             Env::Dev => self.build_dev(),
             Env::Release => self.build_release(),

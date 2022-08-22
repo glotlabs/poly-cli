@@ -1,4 +1,4 @@
-use crate::build::CodeBuilder;
+use crate::build::Runner;
 use crate::exec;
 use std::fmt;
 use std::path::PathBuf;
@@ -27,8 +27,8 @@ impl ScriptRunner {
     }
 }
 
-impl CodeBuilder<Error> for ScriptRunner {
-    fn build(&self) -> Result<(), Error> {
+impl Runner<Error> for ScriptRunner {
+    fn run(&self) -> Result<(), Error> {
         exec::run(&exec::Config {
             work_dir: ".".into(),
             cmd: self.script_path.to_string_lossy().into(),

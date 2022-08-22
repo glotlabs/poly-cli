@@ -156,24 +156,24 @@ fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> 
 
     match build_type {
         BuildType::All => {
-            config.rust_builder.build().map_err(BuildError::RustBuild)?;
+            config.rust_builder.run().map_err(BuildError::RustBuild)?;
             config
                 .typescript_builder
-                .build()
+                .run()
                 .map_err(BuildError::TypescriptBuild)?;
         }
 
         BuildType::OnlyTypeScript => {
             config
                 .typescript_builder
-                .build()
+                .run()
                 .map_err(BuildError::TypescriptBuild)?;
         }
     }
 
     if let Some(post_build_runner) = &config.post_build_runner {
         post_build_runner
-            .build()
+            .run()
             .map_err(BuildError::PostBuildRunner)?;
     }
 
@@ -200,8 +200,8 @@ impl BuildType {
     }
 }
 
-pub trait CodeBuilder<E> {
-    fn build(&self) -> Result<(), E>;
+pub trait Runner<E> {
+    fn run(&self) -> Result<(), E>;
 }
 
 #[derive(Debug, Clone)]
