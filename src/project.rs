@@ -1,3 +1,4 @@
+use std::convert::identity;
 use std::fs;
 use std::io;
 use std::io::Cursor;
@@ -17,6 +18,7 @@ pub struct Project {
 
 #[derive(Debug)]
 pub enum Error {
+    InvalidProjectName,
     TempDir(io::Error),
     GetUrl(ureq::Error),
     ReadResponse(io::Error),
@@ -35,6 +37,7 @@ impl Project {
     }
 
     pub fn create(&self) -> Result<(), Error> {
+        validate_name(&self.config.name)?;
         let template_info = self.config.template.info();
         let temp_dir = tempfile::tempdir().map_err(Error::TempDir)?;
         let temp_dir_path = temp_dir.path();
@@ -216,4 +219,20 @@ impl Template {
             }
         }
     }
+}
+
+fn validate_name(name: &str) -> Result<(), Error> {
+    let not_empty = !name.is_empty();
+    let has_valid_chars = name.chars().all(|c| c.is_ascii_lowercase() || c == '_');
+    let first_char_is_ascii = name
+        .chars()
+        .nth(0)
+        .map(|c| c.is_ascii_lowercase())
+        .unwrap_or(false);
+
+    [not_empty, has_valid_chars, first_char_is_ascii]
+        .into_iter()
+        .all(identity)
+        .then_some(())
+        .ok_or(Error::InvalidProjectName)
 }
