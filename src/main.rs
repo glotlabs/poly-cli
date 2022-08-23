@@ -1,11 +1,13 @@
 mod build;
 mod exec;
+mod project;
 mod project_info;
 mod rust_builder;
 mod script_runner;
 mod typescript_builder;
 mod watch;
 
+use crate::project::Project;
 use crate::script_runner::ScriptRunner;
 use build::Env;
 use clap::{Parser, Subcommand};
@@ -22,6 +24,13 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    /// Create a new project
+    #[clap(arg_required_else_help = true)]
+    New {
+        /// Post build script to run after build
+        name: String,
+    },
+
     /// Watch for changes and build
     #[clap(arg_required_else_help = true)]
     Watch {
@@ -34,6 +43,18 @@ fn main() {
     let args = Cli::parse();
 
     match args.command {
+        Commands::New { name } => {
+            let current_dir = get_current_dir();
+            let project = Project::new(project::Config {
+                current_dir,
+                name: name.clone(),
+                template: project::Template::CounterTailwind,
+            });
+
+            let res = project.create();
+            println!("{:?}", res);
+        }
+
         Commands::Watch { script } => {
             let current_dir = get_current_dir();
             let script_path = current_dir.join(script);

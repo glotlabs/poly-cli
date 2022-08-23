@@ -13,4 +13,8 @@ fs_extra = "1.2.0"
 gitignored = "0.4.0"
 notify = "5.0.0-pre.16"
 serde = { version = "1.0.144", features = ["derive"] }
+tempfile = "3.3.0"
 toml = "0.5.9"
+ureq = "2.5.0"
+walkdir = "2.3.2"
+zip-extract = "0.1.1"
