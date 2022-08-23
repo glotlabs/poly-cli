@@ -142,6 +142,13 @@ impl Project {
         let old_content = fs::read_to_string(file_path).map_err(Error::ReadFile)?;
         let new_content = old_content.replace(&template_info.placeholder, &self.config.name);
 
+        println!(
+            "Replacing placeholder: {} -> {} in {}",
+            template_info.placeholder,
+            self.config.name,
+            file_path.display()
+        );
+
         fs::write(&tmp_file_path, new_content).map_err(Error::WriteFile)?;
         fs::rename(&tmp_file_path, file_path).map_err(Error::RenameFile)?;
 
