@@ -27,6 +27,10 @@ impl Config {
             wasm_project_path: project_info.wasm_project_path.clone(),
         }
     }
+
+    fn web_project_wasm_path(&self) -> PathBuf {
+        self.web_project_path.join("wasm")
+    }
 }
 
 #[derive(Debug)]
@@ -66,17 +70,8 @@ impl RustBuilder {
         Self { config: config }
     }
 
-    fn build_release(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
     fn build_dev(&self) -> Result<(), Error> {
-        let _ = fs::remove_dir_all(&self.config.dist_path);
-        fs::create_dir_all(&self.config.dist_path).map_err(Error::CreateDistDir)?;
-
-        let web_project_wasm_path = self.config.web_project_path.join("wasm");
-        let _ = fs::remove_dir_all(&web_project_wasm_path);
-        fs::create_dir_all(&web_project_wasm_path).map_err(Error::CreateWebWasmDir)?;
+        self.prepare_dirs()?;
 
         exec::run(&exec::Config {
             work_dir: ".".into(),
@@ -95,13 +90,61 @@ impl RustBuilder {
                 "--out-name",
                 &self.config.project_name,
                 "--out-dir",
-                &web_project_wasm_path.to_string_lossy(),
+                &self.config.web_project_wasm_path().to_string_lossy(),
             ]),
         })
         .map_err(Error::WasmPack)?;
 
+        self.copy_wasm_to_dist()?;
+
+        Ok(())
+    }
+
+    fn build_release(&self) -> Result<(), Error> {
+        self.prepare_dirs()?;
+
+        exec::run(&exec::Config {
+            work_dir: ".".into(),
+            cmd: "cargo".into(),
+            args: exec::to_args(&["build", "--release", "--color", "always"]),
+        })
+        .map_err(Error::CargoBuild)?;
+
+        exec::run(&exec::Config {
+            work_dir: self.config.wasm_project_path.clone(),
+            cmd: "wasm-pack".into(),
+            args: exec::to_args(&[
+                "build",
+                "--release",
+                "--target",
+                "web",
+                "--out-name",
+                &self.config.project_name,
+                "--out-dir",
+                &self.config.web_project_wasm_path().to_string_lossy(),
+            ]),
+        })
+        .map_err(Error::WasmPack)?;
+
+        self.copy_wasm_to_dist()?;
+
+        Ok(())
+    }
+
+    fn prepare_dirs(&self) -> Result<(), Error> {
+        let _ = fs::remove_dir_all(&self.config.dist_path);
+        fs::create_dir_all(&self.config.dist_path).map_err(Error::CreateDistDir)?;
+
+        let web_project_wasm_path = self.config.web_project_wasm_path();
+        let _ = fs::remove_dir_all(&web_project_wasm_path);
+        fs::create_dir_all(&web_project_wasm_path).map_err(Error::CreateWebWasmDir)?;
+
+        Ok(())
+    }
+
+    fn copy_wasm_to_dist(&self) -> Result<(), Error> {
         fs_extra::dir::copy(
-            &web_project_wasm_path,
+            &self.config.web_project_wasm_path(),
             &self.config.dist_path,
             &fs_extra::dir::CopyOptions::new(),
         )

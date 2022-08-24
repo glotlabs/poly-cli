@@ -24,6 +24,7 @@ impl Config {
 pub enum Error {
     NpmInstall(exec::Error),
     NpmBuildDev(exec::Error),
+    NpmBuildRelease(exec::Error),
 }
 
 impl fmt::Display for Error {
@@ -31,6 +32,7 @@ impl fmt::Display for Error {
         match self {
             Error::NpmInstall(err) => write!(f, "'npm install' failed: {}", err),
             Error::NpmBuildDev(err) => write!(f, "'npm run build-dev' failed: {}", err),
+            Error::NpmBuildRelease(err) => write!(f, "'npm run build-release' failed: {}", err),
         }
     }
 }
@@ -45,17 +47,8 @@ impl TypeScriptBuilder {
         Self { config }
     }
 
-    fn build_release(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
     fn build_dev(&self) -> Result<(), Error> {
-        exec::run(&exec::Config {
-            work_dir: self.config.web_project_path.clone(),
-            cmd: "npm".into(),
-            args: exec::to_args(&["install"]),
-        })
-        .map_err(Error::NpmInstall)?;
+        self.npm_install()?;
 
         exec::run(&exec::Config {
             work_dir: self.config.web_project_path.clone(),
@@ -63,6 +56,30 @@ impl TypeScriptBuilder {
             args: exec::to_args(&["run", "build-dev"]),
         })
         .map_err(Error::NpmBuildDev)?;
+
+        Ok(())
+    }
+
+    fn build_release(&self) -> Result<(), Error> {
+        self.npm_install()?;
+
+        exec::run(&exec::Config {
+            work_dir: self.config.web_project_path.clone(),
+            cmd: "npm".into(),
+            args: exec::to_args(&["run", "build-release"]),
+        })
+        .map_err(Error::NpmBuildRelease)?;
+
+        Ok(())
+    }
+
+    fn npm_install(&self) -> Result<(), Error> {
+        exec::run(&exec::Config {
+            work_dir: self.config.web_project_path.clone(),
+            cmd: "npm".into(),
+            args: exec::to_args(&["install"]),
+        })
+        .map_err(Error::NpmInstall)?;
 
         Ok(())
     }
