@@ -22,13 +22,15 @@ impl Config {
 
 #[derive(Debug)]
 pub enum Error {
+    NpmInstall(exec::Error),
     NpmBuildDev(exec::Error),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            Error::NpmBuildDev(err) => write!(f, "npm run build-dev failed: {}", err),
+            Error::NpmInstall(err) => write!(f, "'npm install' failed: {}", err),
+            Error::NpmBuildDev(err) => write!(f, "'npm run build-dev' failed: {}", err),
         }
     }
 }
@@ -48,6 +50,13 @@ impl TypeScriptBuilder {
     }
 
     fn build_dev(&self) -> Result<(), Error> {
+        exec::run(&exec::Config {
+            work_dir: self.config.web_project_path.clone(),
+            cmd: "npm".into(),
+            args: exec::to_args(&["install"]),
+        })
+        .map_err(Error::NpmInstall)?;
+
         exec::run(&exec::Config {
             work_dir: self.config.web_project_path.clone(),
             cmd: "npm".into(),
