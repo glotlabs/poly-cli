@@ -1,4 +1,4 @@
-use crate::build::Runner;
+mod backlog_builder;
 mod build;
 mod exec;
 mod project;
@@ -8,6 +8,8 @@ mod script_runner;
 mod typescript_builder;
 mod watch;
 
+use crate::backlog_builder::BacklogBuilder;
+use crate::build::Runner;
 use crate::project::Project;
 use crate::rust_builder::RustBuilder;
 use crate::script_runner::ScriptRunner;
@@ -114,7 +116,7 @@ fn main() {
                 None
             };
 
-            let builder = build::Builder::new(build::Config {
+            let builder = BacklogBuilder::new(backlog_builder::Config {
                 rust_builder: rust_builder::RustBuilder::new(
                     rust_builder::Config::from_project_info(&env, &project_info),
                 ),

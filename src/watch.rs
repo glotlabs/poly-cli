@@ -1,6 +1,6 @@
-use crate::build;
-use crate::build::Builder;
-use crate::build::ChangeType;
+use crate::backlog_builder;
+use crate::backlog_builder::BacklogBuilder;
+use crate::backlog_builder::ChangeType;
 use gitignored::Gitignore;
 use notify::event::CreateKind;
 use notify::event::DataChange;
@@ -20,11 +20,11 @@ use std::path::StripPrefixError;
 pub struct Config {
     pub current_dir: PathBuf,
     pub gitignore: Option<String>,
-    pub builder: Builder,
+    pub builder: BacklogBuilder,
 }
 
 impl Config {
-    pub fn new(current_dir: &Path, builder: Builder) -> Self {
+    pub fn new(current_dir: &Path, builder: BacklogBuilder) -> Self {
         Self {
             current_dir: current_dir.to_path_buf(),
             gitignore: read_to_string(".gitignore").ok(),
@@ -86,7 +86,7 @@ fn on_event(config: &mut Config, event_result: Result<Event, notify::Error>) -> 
     );
 
     if let Err(err) = config.builder.run(change_type) {
-        build::handle_error(err)
+        backlog_builder::handle_error(err)
     }
 
     Ok(())
