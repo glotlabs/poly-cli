@@ -1,7 +1,9 @@
+use crate::util::file_util;
 use std::convert::identity;
 use std::fs;
 use std::io;
 use std::io::Cursor;
+use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -25,7 +27,6 @@ pub enum Error {
     ZipExtract(zip_extract::ZipExtractError),
     ReadFile(io::Error),
     WriteFile(io::Error),
-    RenameFile(io::Error),
     RenameDir(io::Error),
     CopyToDestination(fs_extra::error::Error),
     RenameTemplateDir(io::Error),
@@ -47,16 +48,6 @@ impl Project {
         self.extract_zip(bytes, temp_dir_path)?;
         self.replace_placeholders(&template_info, &template_dir)?;
         self.copy_to_dest(&template_dir, &self.config.current_dir)?;
-
-        Ok(())
-    }
-
-    fn copy_to_dest(&self, template_dir: &PathBuf, dest: &PathBuf) -> Result<(), Error> {
-        let tmp_project_path = template_dir.with_file_name(&self.config.name);
-        fs::rename(&template_dir, &tmp_project_path).map_err(Error::RenameTemplateDir)?;
-
-        fs_extra::dir::copy(tmp_project_path, dest, &fs_extra::dir::CopyOptions::new())
-            .map_err(Error::CopyToDestination)?;
 
         Ok(())
     }
@@ -141,10 +132,6 @@ impl Project {
         template_info: &TemplateInfo,
         file_path: &PathBuf,
     ) -> Result<(), Error> {
-        let tmp_file_path = file_path.with_extension("tmp");
-        let old_content = fs::read_to_string(file_path).map_err(Error::ReadFile)?;
-        let new_content = old_content.replace(&template_info.placeholder, &self.config.name);
-
         println!(
             "Replacing placeholder: {} -> {} in {}",
             template_info.placeholder,
@@ -152,8 +139,18 @@ impl Project {
             file_path.display()
         );
 
-        fs::write(&tmp_file_path, new_content).map_err(Error::WriteFile)?;
-        fs::rename(&tmp_file_path, file_path).map_err(Error::RenameFile)?;
+        let old_file = file_util::read(file_path).map_err(Error::ReadFile)?;
+
+        let new_content = old_file
+            .content
+            .replace(&template_info.placeholder, &self.config.name);
+
+        let new_file = file_util::FileData {
+            content: new_content,
+            permissions: old_file.permissions,
+        };
+
+        file_util::write(&file_path, new_file).map_err(Error::WriteFile)?;
 
         Ok(())
     }
@@ -178,6 +175,16 @@ impl Project {
                 fs::rename(dir_path, new_dir_path).map_err(Error::RenameDir)?;
             }
         }
+
+        Ok(())
+    }
+
+    fn copy_to_dest(&self, template_dir: &PathBuf, dest: &PathBuf) -> Result<(), Error> {
+        let tmp_project_path = template_dir.with_file_name(&self.config.name);
+        fs::rename(&template_dir, &tmp_project_path).map_err(Error::RenameTemplateDir)?;
+
+        fs_extra::dir::copy(tmp_project_path, dest, &fs_extra::dir::CopyOptions::new())
+            .map_err(Error::CopyToDestination)?;
 
         Ok(())
     }

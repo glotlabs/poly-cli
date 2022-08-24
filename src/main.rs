@@ -6,6 +6,7 @@ mod project_info;
 mod rust_builder;
 mod script_runner;
 mod typescript_builder;
+mod util;
 mod watch;
 
 use crate::backlog_builder::BacklogBuilder;
