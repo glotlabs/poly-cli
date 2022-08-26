@@ -97,12 +97,12 @@ impl AssetHasher {
 
         let link_assets = content
             .lines()
-            .filter(|line| is_link_asset(line))
+            .filter(|line| is_link_asset(line) && !has_nohash(line))
             .filter_map(extract_link_href);
 
         let script_assets = content
             .lines()
-            .filter(|line| is_script_asset(line))
+            .filter(|line| is_script_asset(line) && !has_nohash(line))
             .filter_map(extract_script_src);
 
         let assets = link_assets
@@ -176,6 +176,10 @@ fn is_link_asset(s: &str) -> bool {
 
 fn is_script_asset(s: &str) -> bool {
     s.contains("script") && s.contains("src")
+}
+
+fn has_nohash(s: &str) -> bool {
+    s.contains("nohash")
 }
 
 fn extract_link_href(s: &str) -> Option<String> {
