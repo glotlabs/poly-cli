@@ -1,12 +1,27 @@
 use crate::build::Env;
-use crate::build::Runner;
 use crate::exec;
 use std::fmt;
+use std::fmt::Display;
 use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum Error {
     Exec(exec::Error),
+}
+
+#[derive(Debug)]
+pub enum Event {
+    BeforeAssetHash,
+    AfterAssetHash,
+}
+
+impl Display for Event {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Event::BeforeAssetHash => write!(f, "before_asset_hash"),
+            Event::AfterAssetHash => write!(f, "after_asset_hash"),
+        }
+    }
 }
 
 impl fmt::Display for Error {
@@ -30,14 +45,12 @@ impl ScriptRunner {
             env: env.clone(),
         }
     }
-}
 
-impl Runner<Error> for ScriptRunner {
-    fn run(&self) -> Result<(), Error> {
+    pub fn run(&self, event: Event) -> Result<(), Error> {
         exec::run(&exec::Config {
             work_dir: ".".into(),
             cmd: self.script_path.to_string_lossy().into(),
-            args: vec![self.env.to_string()],
+            args: vec![self.env.to_string(), event.to_string()],
         })
         .map_err(Error::Exec)?;
 

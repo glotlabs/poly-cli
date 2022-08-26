@@ -174,7 +174,7 @@ fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> 
 
     if let Some(post_build_runner) = &config.post_build_runner {
         post_build_runner
-            .run()
+            .run(script_runner::Event::BeforeAssetHash)
             .map_err(BuildError::PostBuildRunner)?;
     }
 

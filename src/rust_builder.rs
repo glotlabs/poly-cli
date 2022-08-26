@@ -132,12 +132,9 @@ impl RustBuilder {
     }
 
     fn prepare_dirs(&self) -> Result<(), Error> {
-        let _ = fs::remove_dir_all(&self.config.dist_path);
         fs::create_dir_all(&self.config.dist_path).map_err(Error::CreateDistDir)?;
-
-        let web_project_wasm_path = self.config.web_project_wasm_path();
-        let _ = fs::remove_dir_all(&web_project_wasm_path);
-        fs::create_dir_all(&web_project_wasm_path).map_err(Error::CreateWebWasmDir)?;
+        fs::create_dir_all(&self.config.web_project_wasm_path())
+            .map_err(Error::CreateWebWasmDir)?;
 
         Ok(())
     }
@@ -146,7 +143,10 @@ impl RustBuilder {
         fs_extra::dir::copy(
             &self.config.web_project_wasm_path(),
             &self.config.dist_path,
-            &fs_extra::dir::CopyOptions::new(),
+            &fs_extra::dir::CopyOptions {
+                overwrite: true,
+                ..fs_extra::dir::CopyOptions::default()
+            },
         )
         .map_err(Error::CopyWasmToDist)?;
 
