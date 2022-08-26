@@ -9,6 +9,7 @@ pub struct ProjectInfo {
     pub project_name: String,
     pub dist_path: PathBuf,
     pub web_project_path: PathBuf,
+    pub core_project_path: PathBuf,
     pub wasm_project_path: PathBuf,
 }
 
@@ -32,6 +33,7 @@ impl ProjectInfo {
         let cargo_workspace = CargoWorkspaceConfig::from_cargo_toml(current_dir)?;
         let project_name = cargo_workspace.project_name().ok_or(Error::NoProjectName)?;
         let web_project_path = current_dir.join(format!("{}_web", project_name));
+        let core_project_path = current_dir.join(format!("{}_core", project_name));
         let wasm_project_path = current_dir.join(format!("{}_wasm", project_name));
 
         Path::new(&web_project_path)
@@ -48,6 +50,7 @@ impl ProjectInfo {
             project_name,
             dist_path: current_dir.join("dist"),
             web_project_path,
+            core_project_path,
             wasm_project_path,
         })
     }

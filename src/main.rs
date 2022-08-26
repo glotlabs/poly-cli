@@ -1,3 +1,4 @@
+mod asset_hasher;
 mod backlog_builder;
 mod build;
 mod exec;
@@ -9,6 +10,7 @@ mod typescript_builder;
 mod util;
 mod watch;
 
+use crate::asset_hasher::AssetHasher;
 use crate::backlog_builder::BacklogBuilder;
 use crate::build::Runner;
 use crate::project::Project;
@@ -44,6 +46,10 @@ enum Commands {
         #[clap(long)]
         release: bool,
 
+        /// Add filehash to filename of assets
+        #[clap(long)]
+        hash_assets: bool,
+
         /// Post build script to run after build
         #[clap(long)]
         script: Option<String>,
@@ -74,7 +80,11 @@ fn main() {
             println!("{:?}", res);
         }
 
-        Commands::Build { script, release } => {
+        Commands::Build {
+            script,
+            release,
+            hash_assets,
+        } => {
             let env = if release { Env::Release } else { Env::Dev };
             let current_dir = get_current_dir();
             let project_info = ProjectInfo::from_dir(&current_dir).unwrap();
@@ -95,6 +105,16 @@ fn main() {
                 let script_path = current_dir.join(script_name);
                 let script_runner = ScriptRunner::new(script_path, &env);
                 script_runner.run().expect("Post build runner failed");
+            }
+
+            if hash_assets {
+                let asset_hasher =
+                    AssetHasher::new(asset_hasher::Config::from_project_info(&project_info));
+                let result = asset_hasher.run();
+                println!("asset hasher result: {:?}", result);
+
+                rust_builder.run().expect("Rust build failed");
+                typescript_builder.run().expect("TypeScript build failed");
             }
         }
 
@@ -143,6 +163,7 @@ fn print_project_info(info: &ProjectInfo) {
     println!("[Project name] {}", info.project_name);
     println!("[Dist dir] {}", info.dist_path.display());
     println!("[Web project dir] {}", info.web_project_path.display());
+    println!("[Core project dir] {}", info.core_project_path.display());
     println!("[Wasm project dir] {}", info.wasm_project_path.display());
     println!("");
 }
