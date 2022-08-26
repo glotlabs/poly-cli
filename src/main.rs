@@ -93,7 +93,7 @@ fn main() {
 
             if let Some(script_name) = script {
                 let script_path = current_dir.join(script_name);
-                let script_runner = ScriptRunner::new(script_path);
+                let script_runner = ScriptRunner::new(script_path, &env);
                 script_runner.run().expect("Post build runner failed");
             }
         }
@@ -108,7 +108,7 @@ fn main() {
             let post_build_runner = if let Some(script_name) = script {
                 let script_path = current_dir.join(script_name);
                 if script_path.exists() {
-                    Some(ScriptRunner::new(script_path))
+                    Some(ScriptRunner::new(script_path, &env))
                 } else {
                     eprintln!("Could not find script: {}", script_path.display());
                     None

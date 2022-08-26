@@ -1,3 +1,4 @@
+use crate::build::Env;
 use crate::build::Runner;
 use crate::exec;
 use std::fmt;
@@ -19,11 +20,15 @@ impl fmt::Display for Error {
 #[derive(Debug, Clone)]
 pub struct ScriptRunner {
     script_path: PathBuf,
+    env: Env,
 }
 
 impl ScriptRunner {
-    pub fn new(script_path: PathBuf) -> Self {
-        Self { script_path }
+    pub fn new(script_path: PathBuf, env: &Env) -> Self {
+        Self {
+            script_path,
+            env: env.clone(),
+        }
     }
 }
 
@@ -32,7 +37,7 @@ impl Runner<Error> for ScriptRunner {
         exec::run(&exec::Config {
             work_dir: ".".into(),
             cmd: self.script_path.to_string_lossy().into(),
-            args: vec![],
+            args: vec![self.env.to_string()],
         })
         .map_err(Error::Exec)?;
 
