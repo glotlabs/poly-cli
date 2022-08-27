@@ -140,6 +140,16 @@ fn main() {
 
             print_project_info(&project_info);
 
+            let cleaner = Cleaner::new(cleaner::Config::from_project_info(&project_info));
+
+            let rust_builder = rust_builder::RustBuilder::new(
+                rust_builder::Config::from_project_info(&env, &project_info),
+            );
+
+            let typescript_builder = typescript_builder::TypeScriptBuilder::new(
+                typescript_builder::Config::from_project_info(&env, &project_info),
+            );
+
             let post_build_runner = if let Some(script_name) = script {
                 let script_path = current_dir.join(script_name);
                 if script_path.exists() {
@@ -152,19 +162,24 @@ fn main() {
                 None
             };
 
+            // Do initial build
+            cleaner.run().expect("Cleaner failed");
+            rust_builder.run().expect("Rust build failed");
+            typescript_builder.run().expect("TypeScript build failed");
+            post_build_runner.as_ref().map(|runner| {
+                runner
+                    .run(script_runner::Event::BeforeAssetHash)
+                    .expect("Post build runner failed")
+            });
+
             let builder = BacklogBuilder::new(backlog_builder::Config {
-                rust_builder: rust_builder::RustBuilder::new(
-                    rust_builder::Config::from_project_info(&env, &project_info),
-                ),
-                typescript_builder: typescript_builder::TypeScriptBuilder::new(
-                    typescript_builder::Config::from_project_info(&env, &project_info),
-                ),
+                rust_builder,
+                typescript_builder,
                 post_build_runner,
             });
 
-            let watcher_config = watch::Config::new(&current_dir, builder);
-
             println!("Watching for changes...");
+            let watcher_config = watch::Config::new(&current_dir, builder);
             watch::watch(watcher_config);
         }
     }
