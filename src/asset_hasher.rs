@@ -95,23 +95,22 @@ impl AssetHasher {
     fn find_local_assets_in_file(&self, file_path: &PathBuf) -> Result<Vec<Asset>, Error> {
         let content = fs::read_to_string(&file_path).map_err(Error::ReadFile)?;
 
-        let link_assets = content
+        let link_uris = content
             .lines()
             .filter(|line| is_link_asset(line) && !has_nohash(line))
             .filter_map(extract_link_href);
 
-        let script_assets = content
+        let script_uris = content
             .lines()
             .filter(|line| is_script_asset(line) && !has_nohash(line))
             .filter_map(extract_script_src);
 
-        let assets = link_assets
-            .chain(script_assets)
+        let assets = link_uris
+            .chain(script_uris)
             .filter(|uri| is_local_uri(uri))
             .map(|uri| Asset {
                 uri: uri.to_string(),
                 path: self.config.dist_path.join(&uri),
-                source_file: file_path.clone(),
             })
             .filter(|asset| asset.path.exists())
             .collect();
@@ -209,7 +208,6 @@ fn extract_attribute_value(s: &str, name: &str) -> Option<String> {
 struct Asset {
     uri: String,
     path: PathBuf,
-    source_file: PathBuf,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]
