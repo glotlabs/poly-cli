@@ -311,7 +311,12 @@ fn copy_page_template(
     let new_file_name = format!("src/{}.{}", page_name.snake_case(), file_ext);
     let new_file_path = base_path.join(new_file_name);
 
-    file_util::write(&new_file_path, page_file).map_err(Error::WriteCoreHomePage)?;
+    if new_file_path.exists() {
+        println!("Skipping existing file: {}", new_file_path.display());
+    } else {
+        println!("Adding file: {}", new_file_path.display());
+        file_util::write(&new_file_path, page_file).map_err(Error::WriteCoreHomePage)?;
+    }
 
     Ok(())
 }
