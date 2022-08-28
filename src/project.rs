@@ -1,4 +1,7 @@
+use crate::project_info;
+use crate::project_info::ProjectInfo;
 use crate::util::file_util;
+use convert_case::{Case, Casing};
 use std::convert::identity;
 use std::fs;
 use std::io;
@@ -30,6 +33,10 @@ pub enum Error {
     RenameDir(io::Error),
     CopyToDestination(fs_extra::error::Error),
     RenameTemplateDir(io::Error),
+    TemplateProjectInfo(project_info::Error),
+    ReadCoreHomePage(io::Error),
+    WriteCoreHomePage(io::Error),
+    ReadLibFile(io::Error),
 }
 
 impl Project {
@@ -39,17 +46,67 @@ impl Project {
 
     pub fn create(&self) -> Result<(), Error> {
         validate_name(&self.config.name)?;
-        let template_info = self.config.template.info();
         let temp_dir = tempfile::tempdir().map_err(Error::TempDir)?;
+        let template_dir = self.prepare_template(&temp_dir)?;
+        copy_to_dest(&self.config.name, &template_dir, &self.config.current_dir)?;
+
+        Ok(())
+    }
+
+    pub fn add_page(&self, project_info: &ProjectInfo, name: &str) -> Result<(), Error> {
+        let page_name = PageName::new(name);
+        let template_page_name = self.config.template.info().default_page_name;
+        let temp_dir = tempfile::tempdir().map_err(Error::TempDir)?;
+        let template_dir = self.prepare_template(&temp_dir)?;
+        let template_project_info =
+            ProjectInfo::from_dir(&template_dir).map_err(Error::TemplateProjectInfo)?;
+
+        // Add page to core project
+        copy_page_template(
+            &template_project_info.core_project_path,
+            &template_page_name,
+            &project_info.core_project_path,
+            &page_name,
+            "rs",
+        )?;
+
+        // Add page to core lib
+        add_page_to_lib(&project_info.core_project_path, &page_name)?;
+
+        // Add page to wasm project
+        copy_page_template(
+            &template_project_info.wasm_project_path,
+            &template_page_name,
+            &project_info.wasm_project_path,
+            &page_name,
+            "rs",
+        )?;
+
+        // Add page to wasm lib
+        add_page_to_lib(&project_info.wasm_project_path, &page_name)?;
+
+        // Add page to web project
+        copy_page_template(
+            &template_project_info.web_project_path,
+            &template_page_name,
+            &project_info.web_project_path,
+            &page_name,
+            "ts",
+        )?;
+
+        Ok(())
+    }
+
+    fn prepare_template(&self, temp_dir: &tempfile::TempDir) -> Result<PathBuf, Error> {
+        let template_info = self.config.template.info();
         let temp_dir_path = temp_dir.path();
         let template_dir = temp_dir_path.join(&template_info.path);
 
         let bytes = download_file(&template_info)?;
         extract_zip(bytes, temp_dir_path)?;
         replace_placeholders(&self.config.name, &template_info, &template_dir)?;
-        copy_to_dest(&self.config.name, &template_dir, &self.config.current_dir)?;
 
-        Ok(())
+        Ok(template_dir)
     }
 }
 
@@ -69,6 +126,7 @@ pub struct TemplateInfo {
     url: String,
     path: String,
     placeholder: String,
+    default_page_name: PageName,
 }
 
 impl Template {
@@ -80,6 +138,7 @@ impl Template {
                     url: "https://github.com/polyester-web/polyester-templates/archive/refs/heads/main.zip".to_string(),
                     path: "counter-tailwind".to_string(),
                     placeholder: "myapp".to_string(),
+                    default_page_name: PageName::new("home_page"),
                 }
             }
 
@@ -228,6 +287,62 @@ fn copy_to_dest(project_name: &str, template_dir: &PathBuf, dest: &PathBuf) -> R
     Ok(())
 }
 
+fn copy_page_template(
+    template_base_path: &PathBuf,
+    template_page_name: &PageName,
+    base_path: &PathBuf,
+    page_name: &PageName,
+    file_ext: &str,
+) -> Result<(), Error> {
+    let rel_src_file_path = format!("src/{}.{}", template_page_name.snake_case(), file_ext);
+
+    let template_home_page_path = template_base_path.join(&rel_src_file_path);
+
+    let template_file =
+        file_util::read(&template_home_page_path).map_err(Error::ReadCoreHomePage)?;
+
+    let new_content = replace_page_name(&template_file.content, &template_page_name, &page_name);
+
+    let page_file = file_util::FileData {
+        content: new_content,
+        permissions: template_file.permissions,
+    };
+
+    let new_file_name = format!("src/{}.{}", page_name.snake_case(), file_ext);
+    let new_file_path = base_path.join(new_file_name);
+
+    file_util::write(&new_file_path, page_file).map_err(Error::WriteCoreHomePage)?;
+
+    Ok(())
+}
+
+fn add_page_to_lib(base_path: &PathBuf, page_name: &PageName) -> Result<(), Error> {
+    let lib_path = base_path.join("src/lib.rs");
+    let lib_file = file_util::read(&lib_path).map_err(Error::ReadLibFile)?;
+    let page_module = format!("pub mod {};", page_name.snake_case());
+
+    let mut new_content = lib_file.content;
+    if !new_content.ends_with('\n') {
+        new_content.push_str("\n");
+    }
+
+    if !new_content.contains(&page_module) {
+        new_content.push_str(&page_module);
+        new_content.push_str("\n");
+    }
+
+    file_util::write(
+        &lib_path,
+        file_util::FileData {
+            content: new_content,
+            permissions: lib_file.permissions,
+        },
+    )
+    .map_err(Error::WriteFile)?;
+
+    Ok(())
+}
+
 fn validate_name(name: &str) -> Result<(), Error> {
     let not_empty = !name.is_empty();
     let has_valid_chars = name.chars().all(|c| c.is_ascii_lowercase() || c == '_');
@@ -242,4 +357,43 @@ fn validate_name(name: &str) -> Result<(), Error> {
         .all(identity)
         .then_some(())
         .ok_or(Error::InvalidProjectName)
+}
+
+fn replace_page_name(content: &str, from: &PageName, to: &PageName) -> String {
+    content
+        .replace(&from.snake_case(), &to.snake_case())
+        .replace(&from.pascal_case(), &to.pascal_case())
+        .replace(&from.camel_case(), &to.camel_case())
+        .replace(&from.title_case(), &to.title_case())
+}
+
+#[derive(Debug, Clone)]
+pub struct PageName(String);
+
+impl PageName {
+    pub fn new(name: &str) -> PageName {
+        let mut snake_case_name = name.to_case(Case::Snake);
+
+        if !snake_case_name.ends_with("page") {
+            snake_case_name.push_str("_page");
+        }
+
+        PageName(snake_case_name)
+    }
+
+    pub fn snake_case(&self) -> String {
+        self.0.clone()
+    }
+
+    pub fn pascal_case(&self) -> String {
+        self.0.from_case(Case::Snake).to_case(Case::Pascal)
+    }
+
+    pub fn camel_case(&self) -> String {
+        self.0.from_case(Case::Snake).to_case(Case::Camel)
+    }
+
+    pub fn title_case(&self) -> String {
+        self.0.from_case(Case::Snake).to_case(Case::Title)
+    }
 }

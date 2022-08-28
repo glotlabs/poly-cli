@@ -41,6 +41,11 @@ enum Commands {
         name: String,
     },
 
+    Add {
+        #[clap(subcommand)]
+        command: AddCommand,
+    },
+
     /// Build the project
     #[clap(arg_required_else_help = false)]
     Build {
@@ -66,6 +71,16 @@ enum Commands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum AddCommand {
+    /// Create a new project
+    #[clap(arg_required_else_help = true)]
+    Page {
+        /// Page name
+        name: String,
+    },
+}
+
 fn main() {
     let args = Cli::parse();
 
@@ -80,6 +95,23 @@ fn main() {
 
             let res = project.create();
             println!("{:?}", res);
+        }
+
+        Commands::Add { command } => {
+            // fmt
+            match command {
+                AddCommand::Page { name } => {
+                    let current_dir = get_current_dir();
+                    let project_info = ProjectInfo::from_dir(&current_dir).unwrap();
+                    let project = Project::new(project::Config {
+                        current_dir: current_dir.clone(),
+                        name: project_info.project_name.clone(),
+                        template: project::Template::CounterTailwind,
+                    });
+                    let res = project.add_page(&project_info, &name);
+                    println!("{:?}", res);
+                }
+            }
         }
 
         Commands::Build {
