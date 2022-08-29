@@ -110,7 +110,7 @@ impl AssetHasher {
             .filter(|uri| is_local_uri(uri))
             .map(|uri| Asset {
                 uri: uri.to_string(),
-                path: self.config.dist_path.join(&uri),
+                path: self.config.dist_path.join(uri.trim_start_matches("/")),
             })
             .filter(|asset| asset.path.exists())
             .collect();
