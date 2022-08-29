@@ -153,7 +153,6 @@ fn main() {
                 println!("asset hasher result: {:?}", result);
 
                 rust_builder.run().expect("Rust build failed");
-                typescript_builder.run().expect("TypeScript build failed");
 
                 if let Some(script_name) = &script {
                     let script_path = current_dir.join(script_name);
