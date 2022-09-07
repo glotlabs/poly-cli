@@ -85,6 +85,7 @@ impl RustBuilder {
             cmd: "wasm-pack".into(),
             args: exec::to_args(&[
                 "build",
+                "--dev",
                 "--target",
                 "web",
                 "--out-name",
