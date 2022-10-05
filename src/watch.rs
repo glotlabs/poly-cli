@@ -121,6 +121,8 @@ fn classify_file(config: &Config, path: &Path) -> Result<ChangeType, Error> {
         Ok(ChangeType::Rust)
     } else if extension == "ts" {
         Ok(ChangeType::TypeScript)
+    } else if extension == "css" {
+        Ok(ChangeType::Css)
     } else {
         Err(Error::IgnoredFileType(path.to_path_buf()))
     }

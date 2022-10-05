@@ -14,6 +14,7 @@ use std::sync::Mutex;
 pub enum ChangeType {
     Rust,
     TypeScript,
+    Css,
 }
 
 #[derive(Debug)]
@@ -186,8 +187,11 @@ enum BuildType {
 impl BuildType {
     fn from_changes(changes: HashSet<ChangeType>) -> BuildType {
         let only_typescript = HashSet::from([ChangeType::TypeScript]);
+        let only_css = HashSet::from([ChangeType::Css]);
 
         if changes == only_typescript {
+            BuildType::OnlyWeb
+        } else if changes == only_css {
             BuildType::OnlyWeb
         } else {
             BuildType::All
