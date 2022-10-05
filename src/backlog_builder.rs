@@ -3,8 +3,8 @@ use crate::rust_builder;
 use crate::rust_builder::RustBuilder;
 use crate::script_runner;
 use crate::script_runner::ScriptRunner;
-use crate::typescript_builder;
-use crate::typescript_builder::TypeScriptBuilder;
+use crate::web_builder;
+use crate::web_builder::WebBuilder;
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -24,7 +24,7 @@ pub enum Error {
 #[derive(Debug)]
 pub enum BuildError {
     RustBuild(rust_builder::Error),
-    TypescriptBuild(typescript_builder::Error),
+    WebBuild(web_builder::Error),
     PostBuildRunner(script_runner::Error),
 }
 
@@ -37,7 +37,7 @@ pub struct BacklogBuilder {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub rust_builder: RustBuilder,
-    pub typescript_builder: TypeScriptBuilder,
+    pub web_builder: WebBuilder,
     pub post_build_runner: Option<ScriptRunner>,
 }
 
@@ -125,9 +125,9 @@ fn handle_build_error(err: BuildError) {
             println!("Rust build failed: {}", err);
         }
 
-        BuildError::TypescriptBuild(err) => {
+        BuildError::WebBuild(err) => {
             // Prevent rustfmt
-            println!("TypeScript build failed: {}", err);
+            println!("Web build failed: {}", err);
         }
 
         BuildError::PostBuildRunner(err) => {
@@ -158,17 +158,11 @@ fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> 
     match build_type {
         BuildType::All => {
             config.rust_builder.run().map_err(BuildError::RustBuild)?;
-            config
-                .typescript_builder
-                .run()
-                .map_err(BuildError::TypescriptBuild)?;
+            config.web_builder.run().map_err(BuildError::WebBuild)?;
         }
 
-        BuildType::OnlyTypeScript => {
-            config
-                .typescript_builder
-                .run()
-                .map_err(BuildError::TypescriptBuild)?;
+        BuildType::OnlyWeb => {
+            config.web_builder.run().map_err(BuildError::WebBuild)?;
         }
     }
 
@@ -186,7 +180,7 @@ fn run_script(build_type: BuildType, config: &Config) -> Result<(), BuildError> 
 #[derive(Debug)]
 enum BuildType {
     All,
-    OnlyTypeScript,
+    OnlyWeb,
 }
 
 impl BuildType {
@@ -194,7 +188,7 @@ impl BuildType {
         let only_typescript = HashSet::from([ChangeType::TypeScript]);
 
         if changes == only_typescript {
-            BuildType::OnlyTypeScript
+            BuildType::OnlyWeb
         } else {
             BuildType::All
         }

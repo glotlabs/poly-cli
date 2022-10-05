@@ -38,11 +38,11 @@ impl fmt::Display for Error {
 }
 
 #[derive(Debug, Clone)]
-pub struct TypeScriptBuilder {
+pub struct WebBuilder {
     config: Config,
 }
 
-impl TypeScriptBuilder {
+impl WebBuilder {
     pub fn new(config: Config) -> Self {
         Self { config }
     }
@@ -85,7 +85,7 @@ impl TypeScriptBuilder {
     }
 }
 
-impl Runner<Error> for TypeScriptBuilder {
+impl Runner<Error> for WebBuilder {
     fn run(&self) -> Result<(), Error> {
         match &self.config.env {
             Env::Dev => self.build_dev(),

@@ -7,9 +7,9 @@ mod project;
 mod project_info;
 mod rust_builder;
 mod script_runner;
-mod typescript_builder;
 mod util;
 mod watch;
+mod web_builder;
 
 use crate::asset_hasher::AssetHasher;
 use crate::backlog_builder::BacklogBuilder;
@@ -18,7 +18,7 @@ use crate::cleaner::Cleaner;
 use crate::project::Project;
 use crate::rust_builder::RustBuilder;
 use crate::script_runner::ScriptRunner;
-use crate::typescript_builder::TypeScriptBuilder;
+use crate::web_builder::WebBuilder;
 use build::Env;
 use clap::{Parser, Subcommand};
 use project_info::ProjectInfo;
@@ -130,13 +130,12 @@ fn main() {
             let rust_builder =
                 RustBuilder::new(rust_builder::Config::from_project_info(&env, &project_info));
 
-            let typescript_builder = TypeScriptBuilder::new(
-                typescript_builder::Config::from_project_info(&env, &project_info),
-            );
+            let web_builder =
+                WebBuilder::new(web_builder::Config::from_project_info(&env, &project_info));
 
             cleaner.run().expect("Cleaner failed");
             rust_builder.run().expect("Rust build failed");
-            typescript_builder.run().expect("TypeScript build failed");
+            web_builder.run().expect("Web build failed");
 
             if let Some(script_name) = &script {
                 let script_path = current_dir.join(script_name);
@@ -177,9 +176,10 @@ fn main() {
                 rust_builder::Config::from_project_info(&env, &project_info),
             );
 
-            let typescript_builder = typescript_builder::TypeScriptBuilder::new(
-                typescript_builder::Config::from_project_info(&env, &project_info),
-            );
+            let web_builder = web_builder::WebBuilder::new(web_builder::Config::from_project_info(
+                &env,
+                &project_info,
+            ));
 
             let post_build_runner = if let Some(script_name) = script {
                 let script_path = current_dir.join(script_name);
@@ -196,7 +196,7 @@ fn main() {
             // Do initial build
             cleaner.run().expect("Cleaner failed");
             rust_builder.run().expect("Rust build failed");
-            typescript_builder.run().expect("TypeScript build failed");
+            web_builder.run().expect("Web build failed");
             post_build_runner.as_ref().map(|runner| {
                 runner
                     .run(script_runner::Event::BeforeAssetHash)
@@ -205,7 +205,7 @@ fn main() {
 
             let builder = BacklogBuilder::new(backlog_builder::Config {
                 rust_builder,
-                typescript_builder,
+                web_builder,
                 post_build_runner,
             });
 
