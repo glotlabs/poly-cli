@@ -7,6 +7,7 @@ mod project;
 mod project_info;
 mod rust_builder;
 mod script_runner;
+mod serve;
 mod util;
 mod watch;
 mod web_builder;
@@ -68,6 +69,12 @@ enum Commands {
         /// Post build script to run after build
         #[clap(long)]
         script: Option<String>,
+    },
+
+    Serve {
+        /// Path to serve static files from
+        #[clap(long)]
+        path: Option<PathBuf>,
     },
 }
 
@@ -212,6 +219,17 @@ fn main() {
             println!("Watching for changes...");
             let watcher_config = watch::Config::new(&current_dir, builder);
             watch::watch(watcher_config);
+        }
+
+        Commands::Serve { path } => {
+            let default_path = get_current_dir().join("dist");
+            let static_path = path.unwrap_or(default_path);
+
+            let config = serve::Config {
+                static_base_path: static_path,
+            };
+
+            serve::start(&config);
         }
     }
 }
