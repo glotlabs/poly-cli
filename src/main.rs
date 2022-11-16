@@ -229,7 +229,9 @@ fn main() {
                 static_base_path: static_path,
             };
 
-            serve::start(&config);
+            if let Err(err) = serve::start(&config) {
+                eprintln!("Error: {:?}", err);
+            }
         }
     }
 }

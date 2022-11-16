@@ -11,8 +11,17 @@ pub struct Config {
     pub static_base_path: PathBuf,
 }
 
-pub fn start(config: &Config) {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+#[derive(Debug)]
+pub enum Error {
+    Bind(std::io::Error),
+}
+
+pub fn start(config: &Config) -> Result<(), Error> {
+    let port = listen_port_from_str(&config.static_base_path.to_string_lossy());
+    let addr = format!("127.0.0.1:{}", port);
+
+    println!("Listening on {}", addr);
+    let listener = TcpListener::bind(&addr).map_err(Error::Bind)?;
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
@@ -22,6 +31,8 @@ pub fn start(config: &Config) {
             Err(err) => eprintln!("Error: {}", err),
         };
     }
+
+    Ok(())
 }
 
 fn handle_connection(config: &Config, mut stream: TcpStream) -> Result<(), String> {
@@ -136,4 +147,16 @@ fn file_path_from_req(config: &Config, req: &Request<()>) -> Result<PathBuf, Str
     } else {
         return Err(format!("Path not found: {}", file_path.to_string_lossy()));
     }
+}
+
+fn listen_port_from_str(s: &str) -> u32 {
+    let n = s
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .fold(0, |sum, c| {
+            // fmt
+            sum + c.to_digit(36).unwrap_or_default()
+        });
+
+    8000 + (n % 1000)
 }
