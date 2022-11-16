@@ -126,7 +126,7 @@ fn file_path_from_req(config: &Config, req: &Request<()>) -> Result<PathBuf, Str
     let abs_path = config.static_base_path.join(&req_path);
 
     let file_path = if Path::new(&abs_path).is_dir() {
-        Path::new(&req_path).join("index.html")
+        Path::new(&abs_path).join("index.html")
     } else {
         abs_path
     };
