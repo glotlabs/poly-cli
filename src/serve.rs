@@ -1,4 +1,5 @@
 use http::{request, HeaderMap, HeaderValue, Request, Response};
+use mime_guess::Mime;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -86,21 +87,17 @@ fn prepare_response(
     req: &Request<()>,
     headers: &HeaderMap<HeaderValue>,
 ) -> Result<Response<Vec<u8>>, String> {
-    let file_path = file_path_from_req(config, req)?;
-    let body = fs::read(&file_path).map_err(|err| format!("Failed to read file: {}", err))?;
-    let content_type = mime_guess::from_path(&file_path)
-        .first()
-        .unwrap_or_else(|| mime_guess::mime::APPLICATION_OCTET_STREAM);
+    let body = prepare_response_body(config, req)?;
 
     let res_builder = Response::builder()
         .status(200)
-        .header("Content-Type", content_type.to_string());
+        .header("Content-Type", body.content_type.to_string());
 
     let res_builder2 = headers.iter().fold(res_builder, |builder, (name, value)| {
         builder.header(name, value)
     });
 
-    let response = res_builder2.body(body).unwrap();
+    let response = res_builder2.body(body.content).unwrap();
 
     Ok(response)
 }
@@ -132,20 +129,46 @@ fn read_request(stream: &mut TcpStream) -> Result<Request<()>, String> {
     Ok(req)
 }
 
+pub struct Body {
+    content: Vec<u8>,
+    content_type: Mime,
+}
+
+fn prepare_response_body(config: &Config, req: &Request<()>) -> Result<Body, String> {
+    let file_path = file_path_from_req(config, req)?;
+
+    if file_path.exists() {
+        let content =
+            fs::read(&file_path).map_err(|err| format!("Failed to read file: {}", err))?;
+        let content_type = mime_guess::from_path(&file_path)
+            .first()
+            .unwrap_or_else(|| mime_guess::mime::APPLICATION_OCTET_STREAM);
+        Ok(Body {
+            content,
+            content_type,
+        })
+    } else if file_path.ends_with("favicon.ico") {
+        let content_type = mime_guess::from_ext("ico")
+            .first()
+            .unwrap_or_else(|| mime_guess::mime::APPLICATION_OCTET_STREAM);
+
+        Ok(Body {
+            content: favicon(),
+            content_type,
+        })
+    } else {
+        Err(format!("Path not found: {}", file_path.to_string_lossy()))
+    }
+}
+
 fn file_path_from_req(config: &Config, req: &Request<()>) -> Result<PathBuf, String> {
     let req_path = req.uri().path().trim_start_matches("/");
     let abs_path = config.static_base_path.join(&req_path);
 
-    let file_path = if Path::new(&abs_path).is_dir() {
-        Path::new(&abs_path).join("index.html")
+    if Path::new(&abs_path).is_dir() {
+        Ok(Path::new(&abs_path).join("index.html"))
     } else {
-        abs_path
-    };
-
-    if file_path.exists() {
-        Ok(file_path)
-    } else {
-        return Err(format!("Path not found: {}", file_path.to_string_lossy()));
+        Ok(abs_path)
     }
 }
 
@@ -159,4 +182,9 @@ fn listen_port_from_str(s: &str) -> u32 {
         });
 
     8000 + (n % 1000)
+}
+
+fn favicon() -> Vec<u8> {
+    let encoded = "AAABAAEAEBAQAAEABAAoAQAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA";
+    base64::decode(&encoded).unwrap()
 }
