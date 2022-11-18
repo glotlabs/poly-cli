@@ -61,6 +61,15 @@ pub fn to_args(args: &[&str]) -> Vec<String> {
     args.iter().map(|s| s.to_string()).collect()
 }
 
+pub fn cmd_from_str(s: &str) -> Option<(String, Vec<String>)> {
+    let parts: Vec<&str> = s.split_whitespace().collect();
+
+    match &parts[..] {
+        [cmd, args @ ..] => Some((cmd.to_string(), to_args(args))),
+        [] => None,
+    }
+}
+
 pub fn run(config: &Config) -> Result<String, Error> {
     log(config);
 

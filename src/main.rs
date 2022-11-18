@@ -74,7 +74,15 @@ enum Commands {
     Serve {
         /// Path to serve static files from
         #[clap(long)]
-        path: Option<PathBuf>,
+        static_: Option<PathBuf>,
+
+        /// Path to read routes from
+        #[clap(long)]
+        routes: Option<PathBuf>,
+
+        /// Additional response headers
+        #[clap(long)]
+        header: Vec<String>,
     },
 }
 
@@ -221,12 +229,21 @@ fn main() {
             watch::watch(watcher_config);
         }
 
-        Commands::Serve { path } => {
+        Commands::Serve {
+            static_,
+            routes,
+            header,
+        } => {
             let default_path = get_current_dir().join("dist");
-            let static_path = path.unwrap_or(default_path);
+            let static_base_path = static_.unwrap_or(default_path);
+            let parsed_routes = routes
+                .map(|path| serve::read_routes(&path))
+                .unwrap_or_default();
 
             let config = serve::Config {
-                static_base_path: static_path,
+                static_base_path,
+                routes: parsed_routes,
+                response_headers: header,
             };
 
             if let Err(err) = serve::start(&config) {

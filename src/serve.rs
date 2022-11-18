@@ -1,15 +1,48 @@
+use http::header::HeaderName;
 use http::{request, HeaderMap, HeaderValue, Request, Response};
 use mime_guess::Mime;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
+
+use crate::exec;
 
 const HTTP1_1: &[u8] = b"HTTP/1.1 200 OK";
 const CRNL: &[u8] = b"\r\n";
 
 pub struct Config {
     pub static_base_path: PathBuf,
+    pub routes: Vec<Route>,
+    pub response_headers: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Route {
+    pub path: String,
+    pub cmd: String,
+}
+
+pub fn read_routes(path: &PathBuf) -> Vec<Route> {
+    let content = fs::read_to_string(path).unwrap_or_default();
+
+    content
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split("=>").collect();
+
+            if let [path, cmd] = parts[..] {
+                Some(Route {
+                    path: path.trim().to_string(),
+                    cmd: cmd.trim().to_string(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug)]
@@ -39,9 +72,42 @@ pub fn start(config: &Config) -> Result<(), Error> {
 fn handle_connection(config: &Config, mut stream: TcpStream) -> Result<(), String> {
     let req = read_request(&mut stream)?;
     log_request(&req);
-    let res = prepare_response(config, &req, &HeaderMap::new())?;
+    let headers = prepare_headers(config);
+    let res = prepare_response(config, &req, &headers)?;
     write_response(stream, res)?;
     Ok(())
+}
+
+fn prepare_headers(config: &Config) -> HeaderMap<HeaderValue> {
+    let headers: BTreeMap<&str, &str> = config
+        .response_headers
+        .iter()
+        .filter_map(|s| {
+            let parts: Vec<&str> = s.split(":").collect();
+
+            if let [name, value] = parts[..] {
+                Some((name.trim(), value.trim()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    headers
+        .iter()
+        .fold(HeaderMap::new(), |mut headers, (name, value)| {
+            if let Some((hdr_name, hdr_value)) = header_from_str(name, value) {
+                headers.insert(hdr_name, hdr_value);
+            }
+
+            headers
+        })
+}
+
+fn header_from_str(key: &str, value: &str) -> Option<(HeaderName, HeaderValue)> {
+    let name = HeaderName::from_str(key).ok()?;
+    let value = value.parse().ok()?;
+    Some((name, value))
 }
 
 fn log_request(req: &Request<()>) {
@@ -49,16 +115,7 @@ fn log_request(req: &Request<()>) {
 }
 
 fn write_response(mut stream: TcpStream, res: Response<Vec<u8>>) -> Result<(), String> {
-    let body = res.body();
-    let length = body.len();
-
     write(&mut stream, HTTP1_1)?;
-    write(&mut stream, CRNL)?;
-
-    write(
-        &mut stream,
-        format!("Content-Length: {}", length).as_bytes(),
-    )?;
     write(&mut stream, CRNL)?;
 
     for (name, value) in res.headers() {
@@ -70,7 +127,7 @@ fn write_response(mut stream: TcpStream, res: Response<Vec<u8>>) -> Result<(), S
     write(&mut stream, CRNL)?;
 
     stream
-        .write_all(body)
+        .write_all(res.body())
         .map_err(|err| format!("Failed to write body: {}", err))?;
 
     Ok(())
@@ -85,17 +142,20 @@ fn write(stream: &mut TcpStream, data: &[u8]) -> Result<(), String> {
 fn prepare_response(
     config: &Config,
     req: &Request<()>,
-    headers: &HeaderMap<HeaderValue>,
+    extra_headers: &HeaderMap<HeaderValue>,
 ) -> Result<Response<Vec<u8>>, String> {
     let body = prepare_response_body(config, req)?;
 
     let res_builder = Response::builder()
         .status(200)
-        .header("Content-Type", body.content_type.to_string());
+        .header("Content-Type", body.content_type.to_string())
+        .header("Content-Length", body.content.len());
 
-    let res_builder2 = headers.iter().fold(res_builder, |builder, (name, value)| {
-        builder.header(name, value)
-    });
+    let res_builder2 = extra_headers
+        .iter()
+        .fold(res_builder, |builder, (name, value)| {
+            builder.header(name, value)
+        });
 
     let response = res_builder2.body(body.content).unwrap();
 
@@ -134,10 +194,49 @@ pub struct Body {
     content_type: Mime,
 }
 
+fn match_route(config: &Config, req: &Request<()>) -> Option<Route> {
+    let req_parts = path_to_parts(req.uri().path());
+
+    config
+        .routes
+        .iter()
+        .filter(|route| {
+            let route_parts = path_to_parts(&route.path);
+            compare_path_paths(&req_parts, &route_parts)
+        })
+        .next()
+        .cloned()
+}
+
+fn compare_path_paths(req_parts: &Vec<String>, route_parts: &Vec<String>) -> bool {
+    if req_parts.len() == route_parts.len() {
+        req_parts
+            .iter()
+            .zip(route_parts.iter())
+            .all(|(req_part, route_part)| {
+                // fmt
+                req_part == route_part || route_part == "*"
+            })
+    } else {
+        false
+    }
+}
+
+fn path_to_parts(s: &str) -> Vec<String> {
+    s.trim_start_matches("/")
+        .trim_end_matches("/")
+        .split("/")
+        .map(|s| s.to_string())
+        .collect()
+}
+
 fn prepare_response_body(config: &Config, req: &Request<()>) -> Result<Body, String> {
     let file_path = file_path_from_req(config, req)?;
 
-    if file_path.exists() {
+    if let Some(route) = match_route(config, req) {
+        println!("Matched route: {}", route.path);
+        body_from_route(&route)
+    } else if file_path.exists() {
         let content =
             fs::read(&file_path).map_err(|err| format!("Failed to read file: {}", err))?;
         let content_type = mime_guess::from_path(&file_path)
@@ -159,6 +258,22 @@ fn prepare_response_body(config: &Config, req: &Request<()>) -> Result<Body, Str
     } else {
         Err(format!("Path not found: {}", file_path.to_string_lossy()))
     }
+}
+
+fn body_from_route(route: &Route) -> Result<Body, String> {
+    let (cmd, args) = exec::cmd_from_str(&route.cmd).ok_or("Invalid cmd")?;
+
+    let output = exec::run(&exec::Config {
+        work_dir: ".".into(),
+        cmd,
+        args,
+    })
+    .map_err(|err| format!("Failed to run cmd: {}", err))?;
+
+    Ok(Body {
+        content: output.into_bytes(),
+        content_type: mime_guess::mime::TEXT_HTML_UTF_8,
+    })
 }
 
 fn file_path_from_req(config: &Config, req: &Request<()>) -> Result<PathBuf, String> {
