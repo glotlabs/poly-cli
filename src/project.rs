@@ -135,7 +135,7 @@ impl Template {
             Template::CounterTailwind => {
                 // fmt
                 TemplateInfo{
-                    url: "https://github.com/polyester-web/polyester-templates/archive/refs/heads/main.zip".to_string(),
+                    url: "https://github.com/glotlabs/poly-templates/archive/refs/heads/main.zip".to_string(),
                     path: "counter-tailwind".to_string(),
                     placeholder: "myapp".to_string(),
                     default_page_name: PageName::new("home_page"),

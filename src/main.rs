@@ -26,8 +26,8 @@ use project_info::ProjectInfo;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
-#[clap(name = "polyester")]
-#[clap(about = "CLI helper for working with polyester projects", long_about = None)]
+#[clap(name = "poly")]
+#[clap(about = "CLI helper for working with poly projects", long_about = None)]
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
