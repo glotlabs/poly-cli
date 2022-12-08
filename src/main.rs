@@ -64,7 +64,7 @@ enum Commands {
     },
 
     /// Watch for changes and build
-    #[clap(arg_required_else_help = true)]
+    #[clap(arg_required_else_help = false)]
     Watch {
         /// Post build script to run after build
         #[clap(long)]
