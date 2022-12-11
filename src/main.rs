@@ -163,10 +163,14 @@ fn main() {
             if hash_assets {
                 let asset_hasher =
                     AssetHasher::new(asset_hasher::Config::from_project_info(&project_info));
-                let result = asset_hasher.run();
-                println!("asset hasher result: {:?}", result);
+
+                let assets = asset_hasher.collect_hashed_dist_assets().unwrap();
+                asset_hasher.update_uris_in_files(&assets).unwrap();
 
                 rust_builder.run().expect("Rust build failed");
+                web_builder.run().expect("Web build failed");
+
+                asset_hasher.rename_assets(&assets).unwrap();
 
                 if let Some(script_name) = &script {
                     let script_path = current_dir.join(script_name);

@@ -4,15 +4,6 @@ use std::io;
 use std::path::Path;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
-pub struct ProjectInfo {
-    pub project_name: String,
-    pub dist_path: PathBuf,
-    pub web_project_path: PathBuf,
-    pub core_project_path: PathBuf,
-    pub wasm_project_path: PathBuf,
-}
-
 #[derive(Debug)]
 pub enum Error {
     CurrentDirNotAbsolute(PathBuf),
@@ -21,6 +12,15 @@ pub enum Error {
     WasmProjectNotFound(PathBuf),
     ReadCargoWorkspace(io::Error),
     ParseCargoWorkspace(toml::de::Error),
+}
+
+#[derive(Debug, Clone)]
+pub struct ProjectInfo {
+    pub project_name: String,
+    pub dist_path: PathBuf,
+    pub web_project_path: PathBuf,
+    pub core_project_path: PathBuf,
+    pub wasm_project_path: PathBuf,
 }
 
 impl ProjectInfo {
@@ -53,6 +53,14 @@ impl ProjectInfo {
             core_project_path,
             wasm_project_path,
         })
+    }
+
+    pub fn core_project_path_src(&self) -> PathBuf {
+        self.core_project_path.join("src")
+    }
+
+    pub fn web_project_path_src(&self) -> PathBuf {
+        self.web_project_path.join("src")
     }
 }
 

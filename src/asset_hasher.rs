@@ -2,23 +2,25 @@ use crate::util::file_util;
 use crate::ProjectInfo;
 use sha2::Digest;
 use sha2::Sha256;
-use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::ops::Deref;
+use std::path;
 use std::path::PathBuf;
 use walkdir::WalkDir;
 
 pub struct Config {
-    pub core_project_path: PathBuf,
+    pub core_project_path_src: PathBuf,
+    pub web_project_path_src: PathBuf,
     pub dist_path: PathBuf,
 }
 
 impl Config {
     pub fn from_project_info(project_info: &ProjectInfo) -> Self {
         Self {
-            core_project_path: project_info.core_project_path.clone(),
+            core_project_path_src: project_info.core_project_path_src(),
+            web_project_path_src: project_info.web_project_path_src(),
             dist_path: project_info.dist_path.clone(),
         }
     }
@@ -35,6 +37,7 @@ pub enum Error {
     HashAssetFile(io::Error),
     RenameAssetFile(io::Error),
     WriteSourceFile(io::Error),
+    StripPathPrefix(path::StripPrefixError),
 }
 
 impl AssetHasher {
@@ -42,80 +45,93 @@ impl AssetHasher {
         AssetHasher { config }
     }
 
-    pub fn run(&self) -> Result<(), Error> {
-        let rust_files = self.collect_rust_files(&self.config.core_project_path);
-        let mut all_assets: HashSet<HashedAsset> = HashSet::new();
+    pub fn collect_hashed_dist_assets(&self) -> Result<Vec<HashedAsset>, Error> {
+        let dist_assets = self.collect_dist_assets()?;
 
-        rust_files
-            .iter()
-            .map(|file_path| {
-                let assets = self.find_local_assets_in_file(file_path)?;
-                let hashed_assets = assets
-                    .into_iter()
-                    .map(|asset| self.hash_asset(asset))
-                    .collect::<Result<Vec<HashedAsset>, Error>>()?;
+        dist_assets
+            .into_iter()
+            .map(|asset| self.hash_asset(asset))
+            .collect::<Result<Vec<HashedAsset>, Error>>()
+    }
 
-                let assets_set: HashSet<HashedAsset> = HashSet::from_iter(hashed_assets.clone());
-                all_assets.extend(assets_set);
+    pub fn update_uris_in_files(&self, assets: &Vec<HashedAsset>) -> Result<(), Error> {
+        let rust_files = self.collect_files_by_ext(&self.config.core_project_path_src, "rs");
+        let typescript_files = self.collect_files_by_ext(&self.config.web_project_path_src, "ts");
 
-                self.update_uris_in_file(&file_path, hashed_assets)?;
+        let files = [rust_files, typescript_files].concat();
 
-                Ok(())
-            })
-            .collect::<Result<(), Error>>()?;
-
-        all_assets
-            .iter()
-            .map(|asset| self.rename_asset(asset))
-            .collect::<Result<(), Error>>()?;
+        for path in files {
+            self.update_uris_in_file(&path, &assets)?;
+        }
 
         Ok(())
     }
 
-    fn collect_rust_files(&self, path: &PathBuf) -> Vec<PathBuf> {
-        let paths = WalkDir::new(path).into_iter().filter_map(|entry| {
-            match entry {
-                Ok(entry) => {
-                    //fmt
-                    Some(entry.path().to_path_buf())
-                }
+    pub fn rename_assets(&self, assets: &Vec<HashedAsset>) -> Result<(), Error> {
+        assets
+            .iter()
+            .map(|asset| self.rename_asset(asset))
+            .collect::<Result<(), Error>>()
+    }
 
-                Err(err) => {
-                    eprintln!("Warning: Can't access file: {}", err);
-                    None
-                }
-            }
-        });
+    fn collect_dist_assets(&self) -> Result<Vec<Asset>, Error> {
+        let dist_files = self.collect_files(&self.config.dist_path);
 
-        paths
-            .filter(|path| path.extension() == Some(OsStr::new("rs")))
+        dist_files
+            .into_iter()
+            .map(|path| {
+                let uri = self.get_dist_uri(&self.config.dist_path, &path)?;
+                Ok(Asset { path, uri })
+            })
             .collect()
     }
 
-    fn find_local_assets_in_file(&self, file_path: &PathBuf) -> Result<Vec<Asset>, Error> {
-        let content = fs::read_to_string(&file_path).map_err(Error::ReadFile)?;
+    fn get_dist_uri(&self, dist_path: &PathBuf, path: &PathBuf) -> Result<String, Error> {
+        let rel_path = path
+            .strip_prefix(dist_path)
+            .map_err(Error::StripPathPrefix)?;
 
-        let link_uris = content
-            .lines()
-            .filter(|line| is_link_asset(line) && !has_nohash(line))
-            .filter_map(extract_link_href);
+        Ok(format!("/{}", rel_path.to_string_lossy().to_string()))
+    }
 
-        let script_uris = content
-            .lines()
-            .filter(|line| is_script_asset(line) && !has_nohash(line))
-            .filter_map(extract_script_src);
+    fn collect_files_by_ext(&self, path: &PathBuf, extension: &str) -> Vec<PathBuf> {
+        WalkDir::new(path)
+            .into_iter()
+            .filter_map(|entry| {
+                match entry {
+                    Ok(entry) => {
+                        //fmt
+                        Some(entry.path().to_path_buf())
+                    }
 
-        let assets = link_uris
-            .chain(script_uris)
-            .filter(|uri| is_local_uri(uri))
-            .map(|uri| Asset {
-                uri: uri.to_string(),
-                path: self.config.dist_path.join(uri.trim_start_matches("/")),
+                    Err(err) => {
+                        eprintln!("Warning: Can't access file: {}", err);
+                        None
+                    }
+                }
             })
-            .filter(|asset| asset.path.exists())
-            .collect();
+            .filter(|path| path.extension() == Some(OsStr::new(extension)))
+            .collect()
+    }
 
-        Ok(assets)
+    fn collect_files(&self, path: &PathBuf) -> Vec<PathBuf> {
+        WalkDir::new(path)
+            .into_iter()
+            .filter_map(|entry| {
+                match entry {
+                    Ok(entry) => {
+                        //fmt
+                        Some(entry.path().to_path_buf())
+                    }
+
+                    Err(err) => {
+                        eprintln!("Warning: Can't access file: {}", err);
+                        None
+                    }
+                }
+            })
+            .filter(|path| path.is_file())
+            .collect()
     }
 
     fn hash_asset(&self, asset: Asset) -> Result<HashedAsset, Error> {
@@ -125,7 +141,7 @@ impl AssetHasher {
         let digest = hasher.finalize();
 
         let hashed_asset = HashedAsset {
-            asset: asset,
+            asset,
             hash: data_encoding::HEXLOWER.encode(&digest),
         };
 
@@ -135,19 +151,34 @@ impl AssetHasher {
     fn update_uris_in_file(
         &self,
         file_path: &PathBuf,
-        assets: Vec<HashedAsset>,
+        assets: &Vec<HashedAsset>,
     ) -> Result<(), Error> {
         let old_file = file_util::read(&file_path).map_err(Error::ReadFile)?;
 
-        let new_content = assets.iter().fold(old_file.content, |acc, asset| {
-            println!(
-                "Replacing uri {} -> {} in {}",
-                asset.uri,
-                asset.uri_with_hash(),
-                file_path.display()
-            );
-            acc.replace(&asset.uri, &asset.uri_with_hash())
-        });
+        let new_content = old_file
+            .content
+            .lines()
+            .map(|line| {
+                if has_nohash(line) {
+                    line.to_string()
+                } else {
+                    assets.iter().fold(line.to_string(), |acc, asset| {
+                        if line.contains(&asset.uri) {
+                            println!(
+                                "Replacing uri {} -> {} in {}",
+                                asset.uri,
+                                asset.uri_with_hash(),
+                                file_path.display()
+                            );
+                            acc.replace(&asset.uri, &asset.uri_with_hash())
+                        } else {
+                            acc
+                        }
+                    })
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let new_file = file_util::FileData {
             content: new_content,
@@ -169,49 +200,18 @@ impl AssetHasher {
     }
 }
 
-fn is_link_asset(s: &str) -> bool {
-    s.contains("link") && s.contains("href")
-}
-
-fn is_script_asset(s: &str) -> bool {
-    s.contains("script") && s.contains("src")
-}
-
 fn has_nohash(s: &str) -> bool {
     s.contains("nohash")
 }
 
-fn extract_link_href(s: &str) -> Option<String> {
-    extract_attribute_value(s, "href")
-}
-
-fn extract_script_src(s: &str) -> Option<String> {
-    extract_attribute_value(s, "src")
-}
-
-fn is_local_uri(s: &str) -> bool {
-    !s.starts_with("http")
-}
-
-fn extract_attribute_value(s: &str, name: &str) -> Option<String> {
-    let quote_char = '"';
-    let pattern = format!("{}={}", name, quote_char);
-    let pattern_index = s.find(&pattern)?;
-    let value_start_index = pattern_index + pattern.len();
-    let value_length = s[value_start_index..].find(quote_char)?;
-    let value_end_index = value_start_index + value_length;
-
-    Some(s[value_start_index..value_end_index].to_string())
-}
-
 #[derive(Clone, Eq, PartialEq, Hash)]
-struct Asset {
+pub struct Asset {
     uri: String,
     path: PathBuf,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]
-struct HashedAsset {
+pub struct HashedAsset {
     asset: Asset,
     hash: String,
 }
