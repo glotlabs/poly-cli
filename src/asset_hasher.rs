@@ -228,8 +228,18 @@ impl HashedAsset {
 
     fn path_with_hash(&self) -> PathBuf {
         let path = &self.path;
-        let old_ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
-        let new_ext = format!("{}.{}", self.short_hash(), old_ext);
+
+        let new_ext = match path.extension() {
+            Some(old_ext) => {
+                // fmt
+                format!("{}.{}", self.short_hash(), old_ext.to_string_lossy())
+            }
+
+            None => {
+                // fmt
+                self.short_hash()
+            }
+        };
 
         path.with_extension(new_ext)
     }
