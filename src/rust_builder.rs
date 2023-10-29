@@ -28,8 +28,12 @@ impl Config {
         }
     }
 
-    fn web_project_wasm_path(&self) -> PathBuf {
+    fn web_project_wasm_frontend_path(&self) -> PathBuf {
         self.web_project_path.join("wasm")
+    }
+
+    fn web_project_wasm_backend_path(&self) -> PathBuf {
+        self.web_project_path.join("wasm_backend")
     }
 }
 
@@ -40,6 +44,8 @@ pub enum Error {
     CargoBuild(exec::Error),
     WasmPack(exec::Error),
     CopyWasmToDist(fs_extra::error::Error),
+    ReadBackendWasmGlue(io::Error),
+    WriteBackendWasmGlue(io::Error),
 }
 
 impl Display for Error {
@@ -56,6 +62,14 @@ impl Display for Error {
             Error::WasmPack(err) => write!(f, "wasm-pack failed: {}", err),
 
             Error::CopyWasmToDist(err) => write!(f, "Failed to copy wasm dir to dist: {}", err),
+
+            Error::ReadBackendWasmGlue(err) => {
+                write!(f, "Failed to read backend wasm glue: {}", err)
+            }
+
+            Error::WriteBackendWasmGlue(err) => {
+                write!(f, "Failed to write backend wasm glue: {}", err)
+            }
         }
     }
 }
@@ -91,11 +105,34 @@ impl RustBuilder {
                 "--out-name",
                 &self.config.project_name,
                 "--out-dir",
-                &self.config.web_project_wasm_path().to_string_lossy(),
+                &self
+                    .config
+                    .web_project_wasm_frontend_path()
+                    .to_string_lossy(),
             ]),
         })
         .map_err(Error::WasmPack)?;
 
+        exec::run(&exec::Config {
+            work_dir: self.config.wasm_project_path.clone(),
+            cmd: "wasm-pack".into(),
+            args: exec::to_args(&[
+                "build",
+                "--dev",
+                "--target",
+                "nodejs",
+                "--out-name",
+                &self.config.project_name,
+                "--out-dir",
+                &self
+                    .config
+                    .web_project_wasm_backend_path()
+                    .to_string_lossy(),
+            ]),
+        })
+        .map_err(Error::WasmPack)?;
+
+        self.patch_backend_wasm_glue()?;
         self.copy_wasm_to_dist()?;
 
         Ok(())
@@ -122,11 +159,34 @@ impl RustBuilder {
                 "--out-name",
                 &self.config.project_name,
                 "--out-dir",
-                &self.config.web_project_wasm_path().to_string_lossy(),
+                &self
+                    .config
+                    .web_project_wasm_frontend_path()
+                    .to_string_lossy(),
             ]),
         })
         .map_err(Error::WasmPack)?;
 
+        exec::run(&exec::Config {
+            work_dir: self.config.wasm_project_path.clone(),
+            cmd: "wasm-pack".into(),
+            args: exec::to_args(&[
+                "build",
+                "--release",
+                "--target",
+                "nodejs",
+                "--out-name",
+                &self.config.project_name,
+                "--out-dir",
+                &self
+                    .config
+                    .web_project_wasm_backend_path()
+                    .to_string_lossy(),
+            ]),
+        })
+        .map_err(Error::WasmPack)?;
+
+        self.patch_backend_wasm_glue()?;
         self.copy_wasm_to_dist()?;
 
         Ok(())
@@ -134,7 +194,9 @@ impl RustBuilder {
 
     fn prepare_dirs(&self) -> Result<(), Error> {
         fs::create_dir_all(&self.config.dist_path).map_err(Error::CreateDistDir)?;
-        fs::create_dir_all(&self.config.web_project_wasm_path())
+        fs::create_dir_all(&self.config.web_project_wasm_frontend_path())
+            .map_err(Error::CreateWebWasmDir)?;
+        fs::create_dir_all(&self.config.web_project_wasm_backend_path())
             .map_err(Error::CreateWebWasmDir)?;
 
         Ok(())
@@ -142,7 +204,7 @@ impl RustBuilder {
 
     fn copy_wasm_to_dist(&self) -> Result<(), Error> {
         fs_extra::dir::copy(
-            &self.config.web_project_wasm_path(),
+            &self.config.web_project_wasm_frontend_path(),
             &self.config.dist_path,
             &fs_extra::dir::CopyOptions {
                 overwrite: true,
@@ -150,6 +212,41 @@ impl RustBuilder {
             },
         )
         .map_err(Error::CopyWasmToDist)?;
+
+        fs_extra::dir::copy(
+            &self.config.web_project_wasm_backend_path(),
+            &self.config.dist_path,
+            &fs_extra::dir::CopyOptions {
+                overwrite: true,
+                ..fs_extra::dir::CopyOptions::default()
+            },
+        )
+        .map_err(Error::CopyWasmToDist)?;
+
+        Ok(())
+    }
+
+    fn patch_backend_wasm_glue(&self) -> Result<(), Error> {
+        let filename = format!("{}.js", &self.config.project_name);
+        let file_path = self.config.web_project_wasm_backend_path().join(&filename);
+        let content = fs::read_to_string(&file_path).map_err(Error::ReadBackendWasmGlue)?;
+
+        let new_content = content
+            .replace("const { TextDecoder, TextEncoder } = require(`util`);", "")
+            .replace("const bytes = require('fs').readFileSync(path);", "")
+            .replace("const wasmModule = new WebAssembly.Module(bytes);", "")
+            .replace(
+                &format!(
+                    "const path = require('path').join(__dirname, '{}_bg.wasm');",
+                    self.config.project_name
+                ),
+                &format!(
+                    "import wasmModule from \"./{}_bg.wasm\";",
+                    self.config.project_name
+                ),
+            );
+
+        fs::write(&file_path, new_content).map_err(Error::WriteBackendWasmGlue)?;
 
         Ok(())
     }
