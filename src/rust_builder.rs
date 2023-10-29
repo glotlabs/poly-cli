@@ -246,6 +246,7 @@ impl RustBuilder {
 
         let new_content = content
             .replace("const { TextDecoder, TextEncoder } = require(`util`);", "")
+            .replace("const { TextEncoder, TextDecoder } = require(`util`);", "")
             .replace("const bytes = require('fs').readFileSync(path);", "")
             .replace("const wasmModule = new WebAssembly.Module(bytes);", "")
             .replace(
