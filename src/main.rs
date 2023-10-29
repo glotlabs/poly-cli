@@ -267,5 +267,9 @@ fn print_project_info(info: &ProjectInfo) {
     println!("[Web project dir] {}", info.web_project_path.display());
     println!("[Core project dir] {}", info.core_project_path.display());
     println!("[Wasm project dir] {}", info.wasm_project_path.display());
+    println!(
+        "[Cloudflare project dir] {}",
+        info.cloudflare_project_path.display()
+    );
     println!("");
 }

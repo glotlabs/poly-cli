@@ -12,9 +12,11 @@ use std::path::PathBuf;
 pub struct Config {
     pub env: Env,
     pub project_name: String,
-    pub dist_path: PathBuf,
+    pub frontend_dist_path: PathBuf,
+    pub backend_dist_path: PathBuf,
     pub web_project_path: PathBuf,
     pub wasm_project_path: PathBuf,
+    pub cloudflare_project_path: PathBuf,
 }
 
 impl Config {
@@ -22,9 +24,11 @@ impl Config {
         Self {
             env: env.clone(),
             project_name: project_info.project_name.clone(),
-            dist_path: project_info.dist_path.clone(),
+            frontend_dist_path: project_info.dist_path.clone(),
+            backend_dist_path: project_info.backend_dist_path.clone(),
             web_project_path: project_info.web_project_path.clone(),
             wasm_project_path: project_info.wasm_project_path.clone(),
+            cloudflare_project_path: project_info.cloudflare_project_path.clone(),
         }
     }
 
@@ -113,6 +117,8 @@ impl RustBuilder {
         })
         .map_err(Error::WasmPack)?;
 
+        self.copy_wasm_to_frontend_dist()?;
+
         exec::run(&exec::Config {
             work_dir: self.config.wasm_project_path.clone(),
             cmd: "wasm-pack".into(),
@@ -133,7 +139,7 @@ impl RustBuilder {
         .map_err(Error::WasmPack)?;
 
         self.patch_backend_wasm_glue()?;
-        self.copy_wasm_to_dist()?;
+        self.copy_wasm_to_backend_dist()?;
 
         Ok(())
     }
@@ -167,6 +173,8 @@ impl RustBuilder {
         })
         .map_err(Error::WasmPack)?;
 
+        self.copy_wasm_to_frontend_dist()?;
+
         exec::run(&exec::Config {
             work_dir: self.config.wasm_project_path.clone(),
             cmd: "wasm-pack".into(),
@@ -187,13 +195,14 @@ impl RustBuilder {
         .map_err(Error::WasmPack)?;
 
         self.patch_backend_wasm_glue()?;
-        self.copy_wasm_to_dist()?;
+        self.copy_wasm_to_backend_dist()?;
 
         Ok(())
     }
 
     fn prepare_dirs(&self) -> Result<(), Error> {
-        fs::create_dir_all(&self.config.dist_path).map_err(Error::CreateDistDir)?;
+        fs::create_dir_all(&self.config.frontend_dist_path).map_err(Error::CreateDistDir)?;
+        fs::create_dir_all(&self.config.backend_dist_path).map_err(Error::CreateDistDir)?;
         fs::create_dir_all(&self.config.web_project_wasm_frontend_path())
             .map_err(Error::CreateWebWasmDir)?;
         fs::create_dir_all(&self.config.web_project_wasm_backend_path())
@@ -202,10 +211,10 @@ impl RustBuilder {
         Ok(())
     }
 
-    fn copy_wasm_to_dist(&self) -> Result<(), Error> {
+    fn copy_wasm_to_frontend_dist(&self) -> Result<(), Error> {
         fs_extra::dir::copy(
             &self.config.web_project_wasm_frontend_path(),
-            &self.config.dist_path,
+            &self.config.frontend_dist_path,
             &fs_extra::dir::CopyOptions {
                 overwrite: true,
                 ..fs_extra::dir::CopyOptions::default()
@@ -213,9 +222,13 @@ impl RustBuilder {
         )
         .map_err(Error::CopyWasmToDist)?;
 
+        Ok(())
+    }
+
+    fn copy_wasm_to_backend_dist(&self) -> Result<(), Error> {
         fs_extra::dir::copy(
             &self.config.web_project_wasm_backend_path(),
-            &self.config.dist_path,
+            &self.config.backend_dist_path,
             &fs_extra::dir::CopyOptions {
                 overwrite: true,
                 ..fs_extra::dir::CopyOptions::default()

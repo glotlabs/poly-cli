@@ -21,6 +21,8 @@ pub struct ProjectInfo {
     pub web_project_path: PathBuf,
     pub core_project_path: PathBuf,
     pub wasm_project_path: PathBuf,
+    pub cloudflare_project_path: PathBuf,
+    pub backend_dist_path: PathBuf,
 }
 
 impl ProjectInfo {
@@ -35,6 +37,8 @@ impl ProjectInfo {
         let web_project_path = current_dir.join(format!("{}_web", project_name));
         let core_project_path = current_dir.join(format!("{}_core", project_name));
         let wasm_project_path = current_dir.join(format!("{}_wasm", project_name));
+        let cloudflare_project_path = current_dir.join(format!("{}_cloudflare", project_name));
+        let backend_dist_path = cloudflare_project_path.join("dist_backend");
 
         Path::new(&web_project_path)
             .exists()
@@ -52,6 +56,8 @@ impl ProjectInfo {
             web_project_path,
             core_project_path,
             wasm_project_path,
+            cloudflare_project_path,
+            backend_dist_path,
         })
     }
 
