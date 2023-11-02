@@ -136,7 +136,9 @@ fn is_ignored_by_component(path: &Path) -> bool {
     path.components().any(|component| {
         // fmt
         component == path::Component::Normal("wasm".as_ref())
+            || component == path::Component::Normal("wasm_backend".as_ref())
             || component == path::Component::Normal("dist".as_ref())
+            || component == path::Component::Normal("dist_backend".as_ref())
             || component == path::Component::Normal("node_modules".as_ref())
             || component == path::Component::Normal("target".as_ref())
     })
