@@ -141,6 +141,7 @@ fn is_ignored_by_component(path: &Path) -> bool {
             || component == path::Component::Normal("dist_backend".as_ref())
             || component == path::Component::Normal("node_modules".as_ref())
             || component == path::Component::Normal("target".as_ref())
+            || component.as_os_str().to_string_lossy().starts_with('.')
     })
 }
 
