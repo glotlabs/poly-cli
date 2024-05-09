@@ -6,6 +6,8 @@ use crate::script_runner::ScriptRunner;
 use crate::web_builder;
 use crate::web_builder::WebBuilder;
 use std::collections::HashSet;
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -27,6 +29,16 @@ pub enum BuildError {
     RustBuild(rust_builder::Error),
     WebBuild(web_builder::Error),
     PostBuildRunner(script_runner::Error),
+}
+
+impl Display for BuildError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        match self {
+            BuildError::RustBuild(err) => write!(f, "---Rust build failed: {}", err),
+            BuildError::WebBuild(err) => write!(f, "Web build failed: {}", err),
+            BuildError::PostBuildRunner(err) => write!(f, "Post build runner failed: {}", err),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -94,7 +106,7 @@ fn build(config: Config, state: Arc<State>) -> Result<(), Error> {
 
         std::thread::spawn(move || {
             if let Err(err) = run_script(build_type, &config) {
-                handle_build_error(err);
+                println!("{}", err);
             };
 
             state
@@ -111,29 +123,11 @@ fn build(config: Config, state: Arc<State>) -> Result<(), Error> {
         Ok(())
     }
 }
+
 pub fn handle_error(err: Error) {
     match err {
         Error::BacklogLock(err) => {
             println!("Failed to get a lock on backlog: {}", err);
-        }
-    }
-}
-
-fn handle_build_error(err: BuildError) {
-    match err {
-        BuildError::RustBuild(err) => {
-            // Prevent rustfmt
-            println!("Rust build failed: {}", err);
-        }
-
-        BuildError::WebBuild(err) => {
-            // Prevent rustfmt
-            println!("Web build failed: {}", err);
-        }
-
-        BuildError::PostBuildRunner(err) => {
-            // Prevent rustfmt
-            println!("Post-build script failed: {}", err);
         }
     }
 }

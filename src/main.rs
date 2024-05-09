@@ -23,7 +23,7 @@ use crate::web_builder::WebBuilder;
 use build::Env;
 use clap::{Parser, Subcommand};
 use project_info::ProjectInfo;
-use std::path::PathBuf;
+use std::{path::PathBuf, process};
 
 #[derive(Debug, Parser)]
 #[clap(name = "poly")]
@@ -149,8 +149,16 @@ fn main() {
                 WebBuilder::new(web_builder::Config::from_project_info(&env, &project_info));
 
             cleaner.run().expect("Cleaner failed");
-            rust_builder.run().expect("Rust build failed");
-            web_builder.run().expect("Web build failed");
+
+            if let Err(err) = rust_builder.run() {
+                eprintln!("Rust build failed: {}", err);
+                process::exit(1);
+            }
+
+            if let Err(err) = web_builder.run() {
+                eprintln!("Web build failed: {}", err);
+                process::exit(1);
+            }
 
             if let Some(script_name) = &script {
                 let script_path = current_dir.join(script_name);
@@ -214,8 +222,17 @@ fn main() {
 
             // Do initial build
             cleaner.run().expect("Cleaner failed");
-            rust_builder.run().expect("Rust build failed");
-            web_builder.run().expect("Web build failed");
+
+            if let Err(err) = rust_builder.run() {
+                eprintln!("Rust build failed: {}", err);
+                process::exit(1);
+            }
+
+            if let Err(err) = web_builder.run() {
+                eprintln!("Web build failed: {}", err);
+                process::exit(1);
+            }
+
             post_build_runner.as_ref().map(|runner| {
                 runner
                     .run(script_runner::Event::BeforeAssetHash)
