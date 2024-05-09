@@ -235,7 +235,7 @@ fn prepare_response_body(config: &Config, req: &Request<()>) -> Result<Body, Str
 
     if let Some(route) = match_route(config, req) {
         println!("Matched route: {}", route.path);
-        body_from_route(&route)
+        body_from_route(req, &route)
     } else if file_path.exists() {
         let content =
             fs::read(&file_path).map_err(|err| format!("Failed to read file: {}", err))?;
@@ -260,8 +260,9 @@ fn prepare_response_body(config: &Config, req: &Request<()>) -> Result<Body, Str
     }
 }
 
-fn body_from_route(route: &Route) -> Result<Body, String> {
-    let (cmd, args) = exec::cmd_from_str(&route.cmd).ok_or("Invalid cmd")?;
+fn body_from_route(req: &Request<()>, route: &Route) -> Result<Body, String> {
+    let (cmd, mut args) = exec::cmd_from_str(&route.cmd).ok_or("Invalid cmd")?;
+    args.push(req.uri().path().to_string());
 
     let output = exec::run(&exec::Config {
         work_dir: ".".into(),
