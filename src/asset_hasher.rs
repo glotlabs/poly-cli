@@ -13,6 +13,7 @@ use walkdir::WalkDir;
 pub struct Config {
     pub core_project_path_src: PathBuf,
     pub web_project_path_src: PathBuf,
+    pub web_project_path_css: PathBuf,
     pub dist_path: PathBuf,
 }
 
@@ -21,6 +22,7 @@ impl Config {
         Self {
             core_project_path_src: project_info.core_project_path_src(),
             web_project_path_src: project_info.web_project_path_src(),
+            web_project_path_css: project_info.web_project_path_css(),
             dist_path: project_info.dist_path.clone(),
         }
     }
@@ -35,7 +37,6 @@ pub enum Error {
     ReadFile(io::Error),
     OpenAssetFile(io::Error),
     HashAssetFile(io::Error),
-    RenameAssetFile(io::Error),
     WriteSourceFile(io::Error),
     StripPathPrefix(path::StripPrefixError),
 }
@@ -54,24 +55,18 @@ impl AssetHasher {
             .collect::<Result<Vec<HashedAsset>, Error>>()
     }
 
-    pub fn update_uris_in_files(&self, assets: &Vec<HashedAsset>) -> Result<(), Error> {
+    pub fn replace_checksum_in_source_files(&self, assets: &Vec<HashedAsset>) -> Result<(), Error> {
         let rust_files = self.collect_files_by_ext(&self.config.core_project_path_src, "rs");
         let typescript_files = self.collect_files_by_ext(&self.config.web_project_path_src, "ts");
+        let css_files = self.collect_files_by_ext(&self.config.web_project_path_css, "css");
 
-        let files = [rust_files, typescript_files].concat();
+        let files = [rust_files, typescript_files, css_files].concat();
 
         for path in files {
-            self.update_uris_in_file(&path, &assets)?;
+            self.replace_checksum_in_file(&path, &assets)?;
         }
 
         Ok(())
-    }
-
-    pub fn rename_assets(&self, assets: &Vec<HashedAsset>) -> Result<(), Error> {
-        assets
-            .iter()
-            .map(|asset| self.rename_asset(asset))
-            .collect::<Result<(), Error>>()
     }
 
     fn collect_dist_assets(&self) -> Result<Vec<Asset>, Error> {
@@ -148,100 +143,69 @@ impl AssetHasher {
         Ok(hashed_asset)
     }
 
-    fn update_uris_in_file(
+    fn replace_checksum_in_file(
         &self,
         file_path: &PathBuf,
         assets: &Vec<HashedAsset>,
     ) -> Result<(), Error> {
         let old_file = file_util::read(&file_path).map_err(Error::ReadFile)?;
+        let mut file_was_changed = false;
 
         let new_content = old_file
             .content
             .lines()
             .map(|line| {
-                if has_nohash(line) {
-                    line.to_string()
-                } else {
-                    assets.iter().fold(line.to_string(), |acc, asset| {
-                        if line.contains(&asset.uri) {
-                            println!(
-                                "Replacing uri {} -> {} in {}",
-                                asset.uri,
-                                asset.uri_with_hash(),
-                                file_path.display()
-                            );
-                            acc.replace(&asset.uri, &asset.uri_with_hash())
-                        } else {
-                            acc
-                        }
-                    })
-                }
+                assets.iter().fold(line.to_string(), |acc, asset| {
+                    if line.contains(&asset.uri_with_placeholder_hash()) {
+                        println!(
+                            "Replacing uri {} -> {} in {}",
+                            asset.uri_with_placeholder_hash(),
+                            asset.uri_with_hash(),
+                            file_path.display()
+                        );
+
+                        file_was_changed = true;
+                        acc.replace(&asset.uri_with_placeholder_hash(), &asset.uri_with_hash())
+                    } else {
+                        acc
+                    }
+                })
             })
             .collect::<Vec<_>>()
             .join("\n");
 
-        let new_file = file_util::FileData {
-            content: new_content,
-            permissions: old_file.permissions,
-        };
+        if file_was_changed {
+            let new_file = file_util::FileData {
+                content: new_content,
+                permissions: old_file.permissions,
+            };
 
-        file_util::write(&file_path, new_file).map_err(Error::WriteSourceFile)?;
+            file_util::write(&file_path, new_file).map_err(Error::WriteSourceFile)?;
+        }
 
         Ok(())
     }
-
-    fn rename_asset(&self, asset: &HashedAsset) -> Result<(), Error> {
-        println!(
-            "Renaming asset {} -> {}",
-            asset.path.display(),
-            asset.path_with_hash().display()
-        );
-        fs::rename(&asset.path, &asset.path_with_hash()).map_err(Error::RenameAssetFile)
-    }
 }
 
-fn has_nohash(s: &str) -> bool {
-    s.contains("nohash")
-}
-
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Asset {
     uri: String,
     path: PathBuf,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct HashedAsset {
     asset: Asset,
     hash: String,
 }
 
 impl HashedAsset {
-    fn uri_with_hash(&self) -> String {
-        let mut uri = self.uri.clone();
-        let dot_index = uri.rfind('.').unwrap_or(uri.len());
-        let hash = format!(".{}", self.short_hash());
-        uri.replace_range(dot_index..dot_index, &hash);
-
-        uri
+    fn uri_with_placeholder_hash(&self) -> String {
+        format!("{}?hash=checksum", self.asset.uri)
     }
 
-    fn path_with_hash(&self) -> PathBuf {
-        let path = &self.path;
-
-        let new_ext = match path.extension() {
-            Some(old_ext) => {
-                // fmt
-                format!("{}.{}", self.short_hash(), old_ext.to_string_lossy())
-            }
-
-            None => {
-                // fmt
-                self.short_hash()
-            }
-        };
-
-        path.with_extension(new_ext)
+    fn uri_with_hash(&self) -> String {
+        format!("{}?hash={}", self.asset.uri, self.short_hash())
     }
 
     fn short_hash(&self) -> String {

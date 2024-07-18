@@ -173,12 +173,12 @@ fn main() {
                     AssetHasher::new(asset_hasher::Config::from_project_info(&project_info));
 
                 let assets = asset_hasher.collect_hashed_dist_assets().unwrap();
-                asset_hasher.update_uris_in_files(&assets).unwrap();
+                asset_hasher
+                    .replace_checksum_in_source_files(&assets)
+                    .unwrap();
 
                 rust_builder.run().expect("Rust build failed");
                 web_builder.run().expect("Web build failed");
-
-                asset_hasher.rename_assets(&assets).unwrap();
 
                 if let Some(script_name) = &script {
                     let script_path = current_dir.join(script_name);

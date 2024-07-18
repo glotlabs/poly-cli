@@ -68,6 +68,10 @@ impl ProjectInfo {
     pub fn web_project_path_src(&self) -> PathBuf {
         self.web_project_path.join("src")
     }
+
+    pub fn web_project_path_css(&self) -> PathBuf {
+        self.web_project_path.join("css")
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
