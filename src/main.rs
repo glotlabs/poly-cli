@@ -172,21 +172,24 @@ fn main() {
                 let asset_hasher =
                     AssetHasher::new(asset_hasher::Config::from_project_info(&project_info));
 
-                let assets = asset_hasher.collect_hashed_dist_assets().unwrap();
-                asset_hasher
-                    .replace_checksum_in_source_files(&assets)
-                    .unwrap();
+                hash_assets_helper(
+                    &asset_hasher,
+                    &rust_builder,
+                    &web_builder,
+                    &script,
+                    &current_dir,
+                    &env,
+                );
 
-                rust_builder.run().expect("Rust build failed");
-                web_builder.run().expect("Web build failed");
-
-                if let Some(script_name) = &script {
-                    let script_path = current_dir.join(script_name);
-                    let script_runner = ScriptRunner::new(script_path, &env);
-                    script_runner
-                        .run(script_runner::Event::AfterAssetHash)
-                        .expect("Post build runner failed");
-                }
+                // Hash again now that assets contains the correct hash
+                hash_assets_helper(
+                    &asset_hasher,
+                    &rust_builder,
+                    &web_builder,
+                    &script,
+                    &current_dir,
+                    &env,
+                );
             }
         }
 
@@ -271,6 +274,31 @@ fn main() {
                 eprintln!("Error: {:?}", err);
             }
         }
+    }
+}
+
+fn hash_assets_helper(
+    asset_hasher: &AssetHasher,
+    rust_builder: &RustBuilder,
+    web_builder: &WebBuilder,
+    script: &Option<String>,
+    current_dir: &PathBuf,
+    env: &Env,
+) {
+    let assets = asset_hasher.collect_hashed_dist_assets().unwrap();
+    asset_hasher
+        .replace_checksum_in_source_files(&assets)
+        .unwrap();
+
+    rust_builder.run().expect("Rust build failed");
+    web_builder.run().expect("Web build failed");
+
+    if let Some(script_name) = &script {
+        let script_path = current_dir.join(script_name);
+        let script_runner = ScriptRunner::new(script_path, &env);
+        script_runner
+            .run(script_runner::Event::AfterAssetHash)
+            .expect("Post build runner failed");
     }
 }
 

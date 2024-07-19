@@ -1,5 +1,6 @@
 use crate::util::file_util;
 use crate::ProjectInfo;
+use regex::Regex;
 use sha2::Digest;
 use sha2::Sha256;
 use std::ffi::OsStr;
@@ -155,21 +156,37 @@ impl AssetHasher {
             .content
             .lines()
             .map(|line| {
-                assets.iter().fold(line.to_string(), |acc, asset| {
-                    if line.contains(&asset.uri_with_placeholder_hash()) {
-                        println!(
-                            "Replacing uri {} -> {} in {}",
-                            asset.uri_with_placeholder_hash(),
-                            asset.uri_with_hash(),
-                            file_path.display()
-                        );
+                assets
+                    .iter()
+                    .fold(line.to_string(), |modified_line, asset| {
+                        let group_name = "hash";
+                        let pattern =
+                            format!(r"{}\?hash=(?<{}>[a-zA-Z0-9]+)", asset.uri, group_name);
 
-                        file_was_changed = true;
-                        acc.replace(&asset.uri_with_placeholder_hash(), &asset.uri_with_hash())
-                    } else {
-                        acc
-                    }
-                })
+                        let captured_hash = Regex::new(&pattern)
+                            .unwrap()
+                            .captures(&modified_line)
+                            .map(|groups| groups[group_name].to_string());
+
+                        let new_hash = asset.short_hash();
+
+                        match captured_hash {
+                            Some(old_hash) if new_hash != old_hash => {
+                                println!(
+                                    "Hash asset [{}]: Replacing hash '{}' -> '{}' in file '{}'",
+                                    asset.uri,
+                                    old_hash,
+                                    asset.short_hash(),
+                                    file_path.file_name().unwrap().to_string_lossy(),
+                                );
+
+                                file_was_changed = true;
+                                modified_line.replace(&old_hash, &asset.short_hash())
+                            }
+
+                            _ => modified_line,
+                        }
+                    })
             })
             .collect::<Vec<_>>()
             .join("\n");
@@ -200,14 +217,6 @@ pub struct HashedAsset {
 }
 
 impl HashedAsset {
-    fn uri_with_placeholder_hash(&self) -> String {
-        format!("{}?hash=checksum", self.asset.uri)
-    }
-
-    fn uri_with_hash(&self) -> String {
-        format!("{}?hash={}", self.asset.uri, self.short_hash())
-    }
-
     fn short_hash(&self) -> String {
         self.hash[..7].to_string()
     }
