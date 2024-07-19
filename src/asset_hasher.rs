@@ -40,6 +40,7 @@ pub enum Error {
     HashAssetFile(io::Error),
     WriteSourceFile(io::Error),
     StripPathPrefix(path::StripPrefixError),
+    Regex(regex::Error),
 }
 
 impl AssetHasher {
@@ -135,10 +136,13 @@ impl AssetHasher {
         let mut file = fs::File::open(&asset.path).map_err(Error::OpenAssetFile)?;
         io::copy(&mut file, &mut hasher).map_err(Error::HashAssetFile)?;
         let digest = hasher.finalize();
+        let pattern = format!(r"{}\?hash=(?<hash>[a-zA-Z0-9]+)", asset.uri);
+        let re = Regex::new(&pattern).map_err(Error::Regex)?;
 
         let hashed_asset = HashedAsset {
             asset,
             hash: data_encoding::HEXLOWER.encode(&digest),
+            re,
         };
 
         Ok(hashed_asset)
@@ -159,18 +163,9 @@ impl AssetHasher {
                 assets
                     .iter()
                     .fold(line.to_string(), |modified_line, asset| {
-                        let group_name = "hash";
-                        let pattern =
-                            format!(r"{}\?hash=(?<{}>[a-zA-Z0-9]+)", asset.uri, group_name);
-
-                        let captured_hash = Regex::new(&pattern)
-                            .unwrap()
-                            .captures(&modified_line)
-                            .map(|groups| groups[group_name].to_string());
-
                         let new_hash = asset.short_hash();
 
-                        match captured_hash {
+                        match asset.extract_hash(&modified_line) {
                             Some(old_hash) if new_hash != old_hash => {
                                 println!(
                                     "Hash asset [{}]: Replacing hash '{}' -> '{}' in file '{}'",
@@ -210,15 +205,20 @@ pub struct Asset {
     path: PathBuf,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone)]
 pub struct HashedAsset {
     asset: Asset,
     hash: String,
+    re: Regex,
 }
 
 impl HashedAsset {
     fn short_hash(&self) -> String {
         self.hash[..7].to_string()
+    }
+
+    fn extract_hash(&self, s: &str) -> Option<String> {
+        self.re.captures(s).map(|groups| groups["hash"].to_string())
     }
 }
 
