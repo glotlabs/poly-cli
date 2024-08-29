@@ -104,6 +104,7 @@ impl RustBuilder {
             args: exec::to_args(&[
                 "build",
                 "--dev",
+                "--no-opt",
                 "--target",
                 "web",
                 "--out-name",
@@ -125,6 +126,7 @@ impl RustBuilder {
             args: exec::to_args(&[
                 "build",
                 "--dev",
+                "--no-opt",
                 "--target",
                 "nodejs",
                 "--out-name",
